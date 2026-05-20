@@ -2,7 +2,7 @@ package agent;
 
 public class Main {
 
-    private static final int INTERVAL = 1000;
+    private static final int INTERVAL = 500;
     private static final String SERVER = "http://localhost:9000/metrics";
 
     // get the computer name automatically

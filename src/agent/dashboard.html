@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>System Agent — Ooredoo</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #0d1117;
+      --surface: #161b22;
+      --border:  #21262d;
+      --text:    #c9d1d9;
+      --muted:   #8b949e;
+      --accent:  #58a6ff;
+      --cpu:     #f78166;
+      --mem:     #3fb950;
+      --disk:    #d2a8ff;
+      --warn:    #e3b341;
+      --danger:  #f85149;
+      --radius:  10px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .logo { display: flex; align-items: center; gap: 12px; }
+
+    .logo-dot {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: linear-gradient(135deg, #e8003d, #ff5b7d);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 900; color: #fff;
+    }
+
+    h1 { font-size: 1.3rem; font-weight: 700; }
+    h1 span { display: block; font-size: 0.8rem; color: var(--muted); font-weight: 400; }
+
+    .header-right { display: flex; align-items: center; gap: 12px; }
+
+    #clock { font-size: 0.85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+    #status-pill {
+      padding: 5px 14px; border-radius: 20px;
+      font-size: 0.75rem; font-weight: 600;
+      background: #1a2a1a; color: var(--mem); border: 1px solid var(--mem);
+      transition: all .3s;
+    }
+    #status-pill.error { background: #2a1a1a; color: var(--danger); border-color: var(--danger); }
+    #status-pill.warn  { background: #2a2212; color: var(--warn);   border-color: var(--warn); }
+
+    /* ── Machine Tabs ── */
+    #tabs-bar {
+      display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;
+    }
+
+    .tab {
+      padding: 6px 16px; border-radius: 6px; cursor: pointer;
+      font-size: 0.78rem; font-weight: 600;
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--muted); transition: all .15s;
+    }
+    .tab:hover { color: var(--text); border-color: #30363d; }
+    .tab.active { background: #1a2d4a; border-color: var(--accent); color: var(--accent); }
+
+    .tab .dot {
+      display: inline-block; width: 7px; height: 7px;
+      border-radius: 50%; margin-right: 7px; vertical-align: middle;
+    }
+    .tab.ok   .dot { background: var(--mem); }
+    .tab.warn .dot { background: var(--warn); }
+    .tab.high .dot { background: var(--danger); }
+
+    /* ── Waiting state (shown before any agent connects) ── */
+    #waiting {
+      text-align: center; padding: 80px 20px; color: var(--muted);
+    }
+    #waiting p { font-size: 0.9rem; }
+
+    /* ── KPI Cards ── */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px; margin-bottom: 14px;
+    }
+
+    .kpi-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px 20px;
+      position: relative; overflow: hidden;
+    }
+    .kpi-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    }
+    .kpi-card.cpu::before  { background: var(--cpu); }
+    .kpi-card.mem::before  { background: var(--mem); }
+    .kpi-card.disk::before { background: var(--disk); }
+
+    .kpi-label {
+      font-size: 0.7rem; font-weight: 600; letter-spacing: 1px;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 10px;
+    }
+    .kpi-value {
+      font-size: 2.6rem; font-weight: 700; line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+    .kpi-card.cpu  .kpi-value { color: var(--cpu); }
+    .kpi-card.mem  .kpi-value { color: var(--mem); }
+    .kpi-card.disk .kpi-value { color: var(--disk); }
+
+    .kpi-sub { font-size: 0.75rem; color: var(--muted); margin-top: 8px; }
+
+    .gauge-track {
+      height: 5px; background: var(--border); border-radius: 3px;
+      margin-top: 14px; overflow: hidden;
+    }
+    .gauge-fill { height: 100%; border-radius: 3px; transition: width .5s ease; }
+    .kpi-card.cpu  .gauge-fill { background: var(--cpu); }
+    .kpi-card.mem  .gauge-fill { background: var(--mem); }
+    .kpi-card.disk .gauge-fill { background: var(--disk); }
+
+    /* ── Charts ── */
+    .chart-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 14px; margin-bottom: 14px;
+    }
+
+    .chart-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px 18px;
+    }
+    .chart-label {
+      font-size: 0.7rem; font-weight: 600; letter-spacing: .8px;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 12px;
+    }
+    canvas { width: 100%; display: block; }
+
+    /* ── Log Table ── */
+    .log-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px 20px;
+    }
+    .log-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 14px;
+    }
+    .log-title {
+      font-size: 0.7rem; font-weight: 600; letter-spacing: .8px;
+      text-transform: uppercase; color: var(--muted);
+    }
+    #log-count { font-size: 0.72rem; color: var(--accent); }
+
+    #log-body { max-height: 210px; overflow-y: auto; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+    thead th {
+      text-align: left; padding: 8px 10px; color: var(--muted);
+      font-weight: 600; border-bottom: 1px solid var(--border);
+      font-size: 0.7rem; letter-spacing: .5px; white-space: nowrap;
+    }
+    tbody tr { border-bottom: 1px solid var(--border); }
+    tbody tr:last-child { border-bottom: none; }
+    tbody td { padding: 7px 10px; font-variant-numeric: tabular-nums; }
+    tbody tr:hover { background: #1c2128; }
+
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      font-size: 0.68rem; font-weight: 600;
+    }
+    .badge-ok     { background: #1a2a1a; color: var(--mem); }
+    .badge-warn   { background: #2a2212; color: var(--warn); }
+    .badge-danger { background: #2a1212; color: var(--danger); }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center; margin-top: 24px;
+      font-size: 0.72rem; color: #444d56;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="logo">
+      <div class="logo-dot">O</div>
+      <div>
+        <h1>System Agent</h1>
+      </div>
+    </div>
+    <div class="header-right">
+      <span id="clock">--:--:--</span>
+      <div id="status-pill">● CONNECTING…</div>
+    </div>
+  </header>
+
+  <!-- One tab per machine — filled in by JavaScript -->
+  <div id="tabs-bar"></div>
+
+  <!-- Shown before any agent connects -->
+  <div id="waiting">
+    <p>⏳ Waiting for agents to connect…</p>
+  </div>
+
+  <!-- Main dashboard — hidden until data arrives -->
+  <div id="dashboard" style="display:none">
+
+    <!-- KPI cards -->
+    <div class="kpi-row">
+      <div class="kpi-card cpu">
+        <div class="kpi-label">CPU Usage</div>
+        <div class="kpi-value" id="cpu-val">—</div>
+        <div class="kpi-sub"  id="cpu-sub">Processor load</div>
+        <div class="gauge-track"><div class="gauge-fill" id="cpu-gauge" style="width:0%"></div></div>
+      </div>
+      <div class="kpi-card mem">
+        <div class="kpi-label">Memory</div>
+        <div class="kpi-value" id="mem-val">—</div>
+        <div class="kpi-sub"  id="mem-sub">—</div>
+        <div class="gauge-track"><div class="gauge-fill" id="mem-gauge" style="width:0%"></div></div>
+      </div>
+      <div class="kpi-card disk">
+        <div class="kpi-label">Disk Usage</div>
+        <div class="kpi-value" id="disk-val">—</div>
+        <div class="kpi-sub"  id="disk-sub">—</div>
+        <div class="gauge-track"><div class="gauge-fill" id="disk-gauge" style="width:0%"></div></div>
+      </div>
+    </div>
+
+    <!-- Line graphs -->
+    <div class="chart-row">
+      <div class="chart-card">
+        <div class="chart-label">CPU History</div>
+        <canvas id="cpu-chart" height="110"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-label">Memory History</div>
+        <canvas id="mem-chart" height="110"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-label">Disk History</div>
+        <canvas id="disk-chart" height="110"></canvas>
+      </div>
+    </div>
+
+    <!-- Log table -->
+    <div class="log-card">
+      <div class="log-header">
+        <span class="log-title">Recent Readings</span>
+        <span id="log-count"></span>
+      </div>
+      <div id="log-body">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Machine</th>
+              <th>CPU %</th>
+              <th>RAM %</th>
+              <th>RAM Used</th>
+              <th>RAM Total</th>
+              <th>Disk %</th>
+              <th>Disk Used</th>
+              <th>Disk Total</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="log-rows"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- end #dashboard -->
+
+  <footer>System Agent v2.0 &nbsp;·&nbsp; Refresh: <span id="next-tick">1.5s</span></footer>
+
+<script>
+// ── Clock in the top-right corner ────────────────────────────────────────────
+function updateClock() {
+  const t = new Date();
+  const h = String(t.getHours()).padStart(2, '0');
+  const m = String(t.getMinutes()).padStart(2, '0');
+  const s = String(t.getSeconds()).padStart(2, '0');
+  document.getElementById('clock').textContent = h + ':' + m + ':' + s;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── Simple line chart drawn on an HTML5 Canvas (no libraries) ────────────────
+class LineChart {
+  constructor(canvasId, color) {
+    this.canvas = document.getElementById(canvasId);
+    this.ctx    = this.canvas.getContext('2d');
+    this.color  = color;
+    this.data   = [];
+
+    // fix blurry lines on high-DPI screens
+    const dpr  = window.devicePixelRatio || 1;
+    const rect = this.canvas.getBoundingClientRect();
+    this.w = rect.width  || 400;
+    this.h = rect.height || 110;
+    this.canvas.width  = this.w * dpr;
+    this.canvas.height = this.h * dpr;
+    this.ctx.scale(dpr, dpr);
+  }
+
+  // call this with a new array of {t, v} points to redraw the chart
+  update(series) {
+    this.data = series;
+    this.draw();
+  }
+
+  draw() {
+    const { ctx, w, h, data, color } = this;
+    ctx.clearRect(0, 0, w, h);
+
+    // draw horizontal grid lines at 25%, 50%, 75%
+    ctx.strokeStyle = '#21262d';
+    ctx.lineWidth   = 1;
+    [25, 50, 75].forEach(pct => {
+      const y = h - (pct / 100) * h;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+      ctx.fillStyle = '#555'; ctx.font = '9px monospace';
+      ctx.fillText(pct + '%', 3, y - 3);
+    });
+
+    if (data.length < 2) return;
+
+    // spread points evenly across the width
+    const step = w / (data.length - 1);
+
+    // draw the filled area under the line
+    const gradient = ctx.createLinearGradient(0, 0, 0, h);
+    gradient.addColorStop(0, color + '44');
+    gradient.addColorStop(1, color + '00');
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    data.forEach((pt, i) => {
+      ctx.lineTo(i * step, h - (pt.v / 100) * h);
+    });
+    ctx.lineTo((data.length - 1) * step, h);
+    ctx.closePath();
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    // draw the line itself
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth   = 1.8;
+    ctx.lineJoin    = 'round';
+    data.forEach((pt, i) => {
+      const x = i * step;
+      const y = h - (pt.v / 100) * h;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // draw a dot at the latest value
+    const last = data[data.length - 1];
+    const lx = (data.length - 1) * step;
+    const ly = h - (last.v / 100) * h;
+    ctx.beginPath();
+    ctx.arc(lx, ly, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+}
+
+// create the three charts
+const cpuChart  = new LineChart('cpu-chart',  '#f78166');
+const memChart  = new LineChart('mem-chart',  '#3fb950');
+const diskChart = new LineChart('disk-chart', '#d2a8ff');
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let activeMachine = null;  // which machine tab is selected
+const MAX_LOG = 60;        // how many rows to show in the log table
+const logRows = [];        // array of log entries (newest first)
+const seenKeys = new Set(); // used to avoid adding the same reading twice
+
+// ── Main update function ──────────────────────────────────────────────────────
+async function fetchAndRender() {
+  try {
+    const response = await fetch('/data');
+    const json     = await response.json();
+
+    const machines = json.machines;  // e.g. ["NAFISA", "PC2"]
+
+    if (machines.length === 0) return;  // no agents connected yet
+
+    // hide the waiting message, show the dashboard
+    document.getElementById('waiting').style.display   = 'none';
+    document.getElementById('dashboard').style.display = '';
+
+    // if no tab is selected yet (or selected machine disconnected), pick the first one
+    if (!activeMachine || !machines.includes(activeMachine)) {
+      activeMachine = machines[0];
+    }
+
+    // draw tabs across the top
+    renderTabs(machines, json.data);
+
+    // get the data for the currently selected machine
+    const machineData = json.data[activeMachine];
+    if (!machineData || !machineData.latest) return;
+    const latest = machineData.latest;
+
+    // update the three KPI cards
+    document.getElementById('cpu-val').textContent  = latest.cpu.toFixed(1) + '%';
+    document.getElementById('mem-val').textContent  = latest.mem.toFixed(1) + '%';
+    document.getElementById('disk-val').textContent = latest.disk.toFixed(1) + '%';
+    document.getElementById('mem-sub').textContent  = latest.memUsed + ' / ' + latest.memTotal;
+    document.getElementById('disk-sub').textContent = latest.diskUsed + ' / ' + latest.diskTotal;
+
+    document.getElementById('cpu-gauge').style.width  = latest.cpu  + '%';
+    document.getElementById('mem-gauge').style.width  = latest.mem  + '%';
+    document.getElementById('disk-gauge').style.width = latest.disk + '%';
+
+    // update the status pill
+    const pill  = document.getElementById('status-pill');
+    const worst = Math.max(latest.cpu, latest.mem, latest.disk);
+    if (worst >= 90)      { pill.textContent = '● HIGH LOAD'; pill.className = 'error'; }
+    else if (worst >= 70) { pill.textContent = '● WARNING';   pill.className = 'warn';  }
+    else                  { pill.textContent = '● LIVE';       pill.className = '';      }
+
+    // update the charts
+    cpuChart.update(machineData.cpu);
+    memChart.update(machineData.mem);
+    diskChart.update(machineData.disk);
+
+    // add a log row for every machine's latest reading
+    machines.forEach(name => {
+      const d = json.data[name];
+      if (d && d.latest) addLogRow(d.latest);
+    });
+
+    document.getElementById('next-tick').textContent = '1.5s';
+
+  } catch (e) {
+    // if the fetch failed, show the server as offline
+    const pill = document.getElementById('status-pill');
+    pill.textContent = '● OFFLINE';
+    pill.className   = 'error';
+  }
+}
+
+// draws the machine tabs at the top of the page
+function renderTabs(machines, data) {
+  const bar = document.getElementById('tabs-bar');
+  bar.innerHTML = machines.map(name => {
+    const d = data[name];
+    const worst = d && d.latest ? Math.max(d.latest.cpu, d.latest.mem, d.latest.disk) : 0;
+    const statusClass = worst >= 90 ? 'high' : worst >= 70 ? 'warn' : 'ok';
+    const activeClass = name === activeMachine ? ' active' : '';
+    return '<div class="tab ' + statusClass + activeClass + '" onclick="switchTab(\'' + name + '\')">'
+         + '<span class="dot"></span>' + name + '</div>';
+  }).join('');
+}
+
+// called when the user clicks a machine tab
+function switchTab(name) {
+  activeMachine = name;
+  fetchAndRender();
+}
+
+// adds one row to the log table (avoids duplicates using timestamp + machine name)
+function addLogRow(snap) {
+  const key = snap.machine + ':' + snap.ts;
+  if (seenKeys.has(key)) return;
+  seenKeys.add(key);
+
+  const t = new Date(snap.ts);
+  const timeStr = String(t.getHours()).padStart(2, '0') + ':'
+                + String(t.getMinutes()).padStart(2, '0') + ':'
+                + String(t.getSeconds()).padStart(2, '0');
+
+  logRows.unshift({ time: timeStr, ...snap });  // add to the front (newest first)
+  if (logRows.length > MAX_LOG) logRows.pop();  // remove the oldest if over limit
+
+  renderLogTable();
+}
+
+// redraws the whole log table from the logRows array
+function renderLogTable() {
+  document.getElementById('log-count').textContent = logRows.length + ' readings';
+  document.getElementById('log-rows').innerHTML = logRows.map(r => {
+    const worst = Math.max(r.cpu, r.mem, r.disk);
+    const badgeClass = worst >= 90 ? 'badge-danger' : worst >= 70 ? 'badge-warn' : 'badge-ok';
+    const badgeText  = worst >= 90 ? 'HIGH'         : worst >= 70 ? 'WARN'        : 'OK';
+    return '<tr>'
+      + '<td>' + r.time + '</td>'
+      + '<td>' + r.machine + '</td>'
+      + '<td>' + r.cpu.toFixed(1)  + '%</td>'
+      + '<td>' + r.mem.toFixed(1)  + '%</td>'
+      + '<td>' + r.memUsed   + '</td>'
+      + '<td>' + r.memTotal  + '</td>'
+      + '<td>' + r.disk.toFixed(1) + '%</td>'
+      + '<td>' + r.diskUsed  + '</td>'
+      + '<td>' + r.diskTotal + '</td>'
+      + '<td><span class="badge ' + badgeClass + '">' + badgeText + '</span></td>'
+      + '</tr>';
+  }).join('');
+}
+
+// ── Poll the server every 0.5 seconds ─────────────────────────────────────────
+fetchAndRender();
+setInterval(fetchAndRender, 500);
+</script>
+</body>
+</html>

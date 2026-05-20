@@ -82,9 +82,9 @@ public class SystemMonitor {
         );
     }
 
-    // ask windows for the cpu usage using powershell
+   // ask windows for the cpu usage using powershell
     private double getCpu() throws Exception {
-        String result = runPS("(Get-CimInstance Win32_Processor).LoadPercentage");
+        String result = runPS("(Get-WmiObject Win32_Processor).LoadPercentage");
         result = result.trim();
         return result.isEmpty() ? 0.0 : Double.parseDouble(result);
     }
@@ -98,7 +98,7 @@ public class SystemMonitor {
         return new double[]{ t - f, t };
     }
 
-    //// get disk space using java built in File class
+    // get disk space using java built in File class
     private double[] getDisk() {
         File drive = new File("C:\\");
         long total = drive.getTotalSpace();
