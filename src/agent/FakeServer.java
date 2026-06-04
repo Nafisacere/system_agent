@@ -3,95 +3,72 @@ package agent;
 import java.io.*;
 import java.net.*;
 
-// this is the server that agents connect to
-// it now also serves a live web dashboard at http://localhost:9000
 public class FakeServer {
 
-    private static final int PORT = 9000;
-
-    // put dashboard.html in the same folder as your .java files
+    private static final int HTTP_PORT  = 9000;
+    private static final int UDP_PORT   = 9001;
     private static final String HTML_FOLDER = "src/agent";
 
     public static void main(String[] args) throws Exception {
-        MetricsStore     store = new MetricsStore();
-        DashboardHandler dash  = new DashboardHandler(store, HTML_FOLDER);
 
-        ServerSocket server = new ServerSocket(PORT);
+        MetricsStore store = new MetricsStore();
+        DashboardHandler dash = new DashboardHandler(store, HTML_FOLDER);
 
         System.out.println("MONITORING SERVER");
-        System.out.println("Agents send data to : http://localhost:" + PORT + "/metrics");
-        System.out.println("Open dashboard at   : http://localhost:" + PORT + "/");
+        System.out.println("Agents send data to : port " + UDP_PORT + " (UDP)");
+        System.out.println("Dashboard           : http://localhost:" + HTTP_PORT + "/");
         System.out.println();
 
-        while (true) {
-            Socket client = server.accept();
+        new Thread(() -> listenUdp(store)).start();
 
-            // handle each connection in a new thread
-            // this is needed so the server can handle the browser and the agent at the same time
-            new Thread(() -> handleClient(client, store, dash)).start();
+        ServerSocket httpServer = new ServerSocket(HTTP_PORT);
+        while (true) {
+            Socket client = httpServer.accept();
+            new Thread(() -> handleHttp(client, dash)).start();
         }
     }
 
-    // reads the first line of the HTTP request and decides what to do
-    private static void handleClient(Socket client, MetricsStore store, DashboardHandler dash) {
+    private static void listenUdp(MetricsStore store) {
+        try (DatagramSocket udpSocket = new DatagramSocket(UDP_PORT)) {
+            System.out.println("[Server] Listening on UDP port " + UDP_PORT);
+            byte[] buffer = new byte[65535];
+
+            while (true) {
+                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                udpSocket.receive(packet);
+
+                String json   = new String(packet.getData(), 0, packet.getLength(), "UTF-8").trim();
+                String fromIp = packet.getAddress().getHostAddress();
+
+                printToTerminal(json, fromIp);
+                saveToStore(json, store);
+            }
+        } catch (Exception e) {
+            System.out.println("[Server] UDP error: " + e.getMessage());
+        }
+    }
+
+    private static void handleHttp(Socket client, DashboardHandler dash) {
         try {
             BufferedReader in = new BufferedReader(new InputStreamReader(client.getInputStream()));
-
-            // first line looks like: "POST /metrics HTTP/1.1" or "GET / HTTP/1.1"
             String firstLine = in.readLine();
             if (firstLine == null) { client.close(); return; }
 
-            String method = firstLine.split(" ")[0];   // GET or POST
-            String path   = firstLine.split(" ")[1];   // /metrics or /data or /
+            String method = firstLine.split(" ")[0];
+            String path   = firstLine.split(" ")[1];
 
-            if (method.equals("POST") && path.equals("/metrics")) {
-                receiveMetrics(in, client.getOutputStream(), store);
-                client.close();
-
-            } else if (method.equals("GET")) {
-                // pass the already-open socket to the dashboard handler
-                // NOTE: we already read the first line, so DashboardHandler skips re-reading it
+            if (method.equals("GET")) {
                 dash.handle(client, path);
-
             } else {
                 client.close();
             }
-
         } catch (Exception e) {
-            System.out.println("[Server] Error: " + e.getMessage());
+            System.out.println("[Server] HTTP error: " + e.getMessage());
             try { client.close(); } catch (Exception ignored) {}
         }
     }
 
-    // receives a JSON reading from an agent, prints it, and saves it
-    private static void receiveMetrics(BufferedReader in, OutputStream out, MetricsStore store) throws Exception {
-        // read HTTP headers to find Content-Length
-        int contentLength = 0;
-        String line;
-        while ((line = in.readLine()) != null && !line.isEmpty()) {
-            if (line.toLowerCase().startsWith("content-length:")) {
-                contentLength = Integer.parseInt(line.split(":")[1].trim());
-            }
-        }
-
-        // read the JSON body
-        char[] body = new char[contentLength];
-        in.read(body, 0, contentLength);
-        String json = new String(body).trim();
-
-        // print to terminal (same as before)
-        printToTerminal(json);
-
-        // save to the store so the dashboard can read it
-        saveToStore(json, store);
-
-        // send 200 OK back to the agent
-        String response = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
-        out.write(response.getBytes("UTF-8"));
-    }
-
-    // prints a formatted line to the terminal - same as the old FakeServer
-    private static void printToTerminal(String json) {
+    private static void printToTerminal(String json, String fromIp) {
         try {
             String machine  = parseString(json, "machine");
             double cpu      = parseDouble(json, "cpu");
@@ -106,15 +83,13 @@ public class FakeServer {
             double worst  = Math.max(cpu, Math.max(mem, disk));
             String status = worst >= 90 ? "HIGH" : worst >= 70 ? "WARN" : "OK";
 
-            System.out.printf("[%s] %-20s | CPU: %5.1f%% | RAM: %5.1f%% (%s / %s) | Disk: %5.1f%% | %s%n",
-                    time, machine, cpu, mem, memUsed, memTotal, disk, status);
-
+            System.out.printf("[%s] %-20s | CPU: %5.1f%% | RAM: %5.1f%% (%s / %s) | Disk: %5.1f%% | %s  [from %s]%n",
+                    time, machine, cpu, mem, memUsed, memTotal, disk, status, fromIp);
         } catch (Exception e) {
-            System.out.println("[Server] Could not read data");
+            System.out.println("[Server] Could not read packet");
         }
     }
 
-    // parses the JSON and saves a Snapshot to the store
     private static void saveToStore(String json, MetricsStore store) {
         try {
             String machine   = parseString(json, "machine");
@@ -129,13 +104,10 @@ public class FakeServer {
             store.save(new MetricsStore.Snapshot(
                     machine, cpu, mem, disk,
                     memUsed, memTotal, diskUsed, diskTotal));
-
         } catch (Exception e) {
             System.out.println("[Server] Could not save data: " + e.getMessage());
         }
     }
-
-    // ── small JSON helpers (same as before) ──────────────────────────────────
 
     private static double parseDouble(String json, String key) {
         String search = "\"" + key + "\":";

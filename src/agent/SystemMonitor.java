@@ -4,59 +4,52 @@ import java.io.*;
 import java.nio.file.*;
 import java.util.*;
 
-// this class reads the CPU, RAM and disk info from the computer
-// it works on both windows and linux
 public class SystemMonitor {
 
-    // check what OS we are running on
     private static final boolean IS_WINDOWS =
         System.getProperty("os.name", "").toLowerCase().contains("win");
 
-    // we need these to calculate cpu usage on linux
     private long prevIdle  = 0;
     private long prevTotal = 0;
     private boolean firstRead = true;
 
-    // this holds one reading (snapshot) of all the metrics
     public static class Snapshot {
-        public final double cpu;   // cpu usage in percent
-        public final double mem;   // memory usage in percent
-        public final double disk;  // disk usage in percent
+        public final double cpu;
+        public final double mem;
+        public final double disk;
         public final String memUsed;
         public final String memTotal;
         public final String diskUsed;
         public final String diskTotal;
-        public final long time;    // when was this reading taken
+        public final long   time;
 
         Snapshot(double cpu, double mem, double disk,
                  String memUsed, String memTotal,
                  String diskUsed, String diskTotal) {
-            this.cpu      = cpu;
-            this.mem      = mem;
-            this.disk     = disk;
-            this.memUsed  = memUsed;
-            this.memTotal = memTotal;
+            this.cpu       = cpu;
+            this.mem       = mem;
+            this.disk      = disk;
+            this.memUsed   = memUsed;
+            this.memTotal  = memTotal;
             this.diskUsed  = diskUsed;
             this.diskTotal = diskTotal;
-            this.time     = System.currentTimeMillis();
+            this.time      = System.currentTimeMillis();
         }
 
-        // turn the snapshot into JSON so we can send it to the server
         public String toJson() {
             return "{"
-                + "\"cpu\":"        + String.format("%.1f", cpu)  + ","
-                + "\"mem\":"        + String.format("%.1f", mem)  + ","
-                + "\"disk\":"       + String.format("%.1f", disk) + ","
-                + "\"memUsed\":\""  + memUsed   + "\","
-                + "\"memTotal\":\"" + memTotal  + "\","
-                + "\"diskUsed\":\"" + diskUsed  + "\","
-                + "\"diskTotal\":\"" + diskTotal + "\","
-                + "\"time\":"       + time
+                + "\"cpu\":"         + String.format("%.1f", cpu)  + ","
+                + "\"mem\":"         + String.format("%.1f", mem)  + ","
+                + "\"disk\":"        + String.format("%.1f", disk) + ","
+                + "\"memUsed\":\""   + memUsed    + "\","
+                + "\"memTotal\":\""  + memTotal   + "\","
+                + "\"diskUsed\":\""  + diskUsed   + "\","
+                + "\"diskTotal\":\"" + diskTotal  + "\","
+                + "\"time\":"        + time
                 + "}";
         }
     }
 
-    // this is the main method that gets called every second
     public Snapshot collect() throws Exception {
         if (IS_WINDOWS) {
             return collectWindows();
@@ -64,8 +57,6 @@ public class SystemMonitor {
             return collectLinux();
         }
     }
-
-    // ── windows ──────────────────────────────────────────────
 
     private Snapshot collectWindows() throws Exception {
         double cpu    = getCpu();
@@ -82,14 +73,12 @@ public class SystemMonitor {
         );
     }
 
-   // ask windows for the cpu usage using powershell
     private double getCpu() throws Exception {
         String result = runPS("(Get-WmiObject Win32_Processor).LoadPercentage");
         result = result.trim();
         return result.isEmpty() ? 0.0 : Double.parseDouble(result);
     }
 
-    // ask windows for the memory info using powershell
     private double[] getMem() throws Exception {
         String total = runPS("(Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory");
         String free  = runPS("(Get-WmiObject Win32_OperatingSystem).FreePhysicalMemory");
@@ -98,7 +87,6 @@ public class SystemMonitor {
         return new double[]{ t - f, t };
     }
 
-    // get disk space using java built in File class
     private double[] getDisk() {
         File drive = new File("C:\\");
         long total = drive.getTotalSpace();
@@ -106,7 +94,6 @@ public class SystemMonitor {
         return new double[]{ total - free, total };
     }
 
-    // run a powershell command and return the output
     private String runPS(String cmd) throws Exception {
         ProcessBuilder pb = new ProcessBuilder("powershell", "-NoProfile", "-Command", cmd);
         pb.redirectErrorStream(true);
@@ -118,8 +105,6 @@ public class SystemMonitor {
         p.waitFor();
         return sb.toString().trim();
     }
-
-    // ── linux ──────────────────────────────────────────────
 
     private Snapshot collectLinux() throws Exception {
         double cpu    = getLinuxCpu();
@@ -141,13 +126,13 @@ public class SystemMonitor {
         for (String line : lines) {
             if (!line.startsWith("cpu ")) continue;
             String[] p = line.trim().split("\\s+");
-            long user = Long.parseLong(p[1]);
-            long nice = Long.parseLong(p[2]);
-            long sys  = Long.parseLong(p[3]);
-            long idle = Long.parseLong(p[4]);
-            long iow  = Long.parseLong(p[5]);
-            long irq  = Long.parseLong(p[6]);
-            long sirq = Long.parseLong(p[7]);
+            long user  = Long.parseLong(p[1]);
+            long nice  = Long.parseLong(p[2]);
+            long sys   = Long.parseLong(p[3]);
+            long idle  = Long.parseLong(p[4]);
+            long iow   = Long.parseLong(p[5]);
+            long irq   = Long.parseLong(p[6]);
+            long sirq  = Long.parseLong(p[7]);
             long steal = (p.length > 8) ? Long.parseLong(p[8]) : 0;
             long idleTime  = idle + iow;
             long totalTime = user + nice + sys + idle + iow + irq + sirq + steal;
@@ -186,9 +171,6 @@ public class SystemMonitor {
         return new double[]{ root.getTotalSpace() - root.getUsableSpace(), root.getTotalSpace() };
     }
 
-    // ── helper ──────────────────────────────────────────────
-
-    // convert bytes to a human readable string like 8.5 GB
     public static String readable(long bytes) {
         if (bytes < 0)               return "N/A";
         if (bytes < 1024)            return bytes + " B";

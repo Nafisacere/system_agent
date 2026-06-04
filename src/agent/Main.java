@@ -2,39 +2,39 @@ package agent;
 
 public class Main {
 
+    private static final int PORT     = 9001;
     private static final int INTERVAL = 500;
-    private static final String SERVER = "http://localhost:9000/metrics";
 
-    // get the computer name automatically
     private static final String MACHINE = getMachineName();
 
     private static String getMachineName() {
         try {
             return java.net.InetAddress.getLocalHost().getHostName().toUpperCase();
         } catch (Exception e) {
-            return "UNKNOWN-MACHINE";
+            return "UNKNOWN";
         }
     }
 
     public static void main(String[] args) throws Exception {
 
+        String host = args.length > 0 ? args[0] : "localhost";
+
         System.out.println("SYSTEM AGENT");
-        System.out.println("Machine: " + MACHINE);
-        System.out.println("Sending to: " + SERVER);
+        System.out.println("Machine   : " + MACHINE);
+        System.out.println("Sending to: " + host + ":" + PORT + " (UDP)");
         System.out.println();
 
         SystemMonitor monitor = new SystemMonitor();
-        Sender sender = new Sender(SERVER, MACHINE);
+        Sender sender = new Sender(host, PORT, MACHINE);
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            System.out.println("\n[Agent] Stopped. Goodbye!");
+            System.out.println("\n[Agent] Stopped.");
         }));
 
         while (true) {
             try {
                 SystemMonitor.Snapshot snap = monitor.collect();
 
-                // get current time for the log
                 java.time.LocalTime t = java.time.LocalTime.now();
                 String time = String.format("%02d:%02d:%02d", t.getHour(), t.getMinute(), t.getSecond());
 

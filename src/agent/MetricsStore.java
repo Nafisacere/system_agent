@@ -2,14 +2,10 @@ package agent;
 
 import java.util.*;
 
-// this class stores the latest readings from each machine
-// it also keeps a history of the last 60 readings for the graphs
 public class MetricsStore {
 
-    // how many past readings to keep per machine
     private static final int MAX_HISTORY = 60;
 
-    // one reading from one machine at one point in time
     public static class Snapshot {
         public final String machine;
         public final double cpu;
@@ -19,7 +15,7 @@ public class MetricsStore {
         public final String memTotal;
         public final String diskUsed;
         public final String diskTotal;
-        public final long   time;  // when was this taken (milliseconds)
+        public final long   time;
 
         public Snapshot(String machine, double cpu, double mem, double disk,
                         String memUsed, String memTotal,
@@ -36,17 +32,13 @@ public class MetricsStore {
         }
     }
 
-    // stores the latest snapshot + history list for one machine
     private static class MachineData {
-        Snapshot         latest  = null;
-        List<Snapshot>   history = new ArrayList<>();
+        Snapshot       latest  = null;
+        List<Snapshot> history = new ArrayList<>();
     }
 
-    // map of machine name -> its data
-    // synchronized because the server thread writes and the dashboard thread reads
     private final Map<String, MachineData> machines = new LinkedHashMap<>();
 
-    // called every time the server receives a new reading from an agent
     public synchronized void save(Snapshot snap) {
         MachineData data = machines.get(snap.machine);
         if (data == null) {
@@ -57,17 +49,14 @@ public class MetricsStore {
         data.latest = snap;
         data.history.add(snap);
         if (data.history.size() > MAX_HISTORY) {
-            data.history.remove(0);  // drop the oldest reading
+            data.history.remove(0);
         }
     }
 
-    // returns all the data as a JSON string for the dashboard to read
-    // example: { "machines": ["PC1","PC2"], "data": { "PC1": {...}, ... } }
     public synchronized String toJson() {
         StringBuilder sb = new StringBuilder();
         sb.append("{");
 
-        // list of machine names
         sb.append("\"machines\":[");
         boolean firstMachine = true;
         for (String name : machines.keySet()) {
@@ -77,7 +66,6 @@ public class MetricsStore {
         }
         sb.append("],");
 
-        // data for each machine
         sb.append("\"data\":{");
         boolean firstData = true;
         for (Map.Entry<String, MachineData> entry : machines.entrySet()) {
@@ -92,25 +80,19 @@ public class MetricsStore {
         return sb.toString();
     }
 
-    // builds the JSON block for one machine
     private void appendMachine(StringBuilder sb, MachineData data) {
         sb.append("{");
         sb.append("\"latest\":");
         appendSnapshot(sb, data.latest);
-
         sb.append(",\"cpu\":");
         appendSeries(sb, data.history, "cpu");
-
         sb.append(",\"mem\":");
         appendSeries(sb, data.history, "mem");
-
         sb.append(",\"disk\":");
         appendSeries(sb, data.history, "disk");
-
         sb.append("}");
     }
 
-    // builds one snapshot as JSON
     private void appendSnapshot(StringBuilder sb, Snapshot s) {
         if (s == null) { sb.append("null"); return; }
         sb.append("{")
@@ -126,7 +108,6 @@ public class MetricsStore {
           .append("}");
     }
 
-    // builds a list of {t, v} points for a chart (e.g. cpu history over time)
     private void appendSeries(StringBuilder sb, List<Snapshot> history, String metric) {
         sb.append("[");
         for (int i = 0; i < history.size(); i++) {
