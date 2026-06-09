@@ -1,0 +1,11 @@
+# compiled java classes - generated from source code, no need to upload
+out/
+
+# os files
+.DS_Store
+Thumbs.db
+
+# ide files
+.vscode/
+.idea/
+*.iml

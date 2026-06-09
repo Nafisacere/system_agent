@@ -5,18 +5,20 @@ import java.net.*;
 
 public class FakeServer {
 
-    private static final int HTTP_PORT  = 9000;
-    private static final int UDP_PORT   = 9001;
+    private static final int    HTTP_PORT   = 9000;
+    private static final int    UDP_PORT    = 9001;
     private static final String HTML_FOLDER = "src/agent";
+    private static final String DB_PATH     = "metrics.db";
 
     public static void main(String[] args) throws Exception {
 
-        MetricsStore store = new MetricsStore();
-        DashboardHandler dash = new DashboardHandler(store, HTML_FOLDER);
+        MetricsStore     store = new MetricsStore(DB_PATH);
+        DashboardHandler dash  = new DashboardHandler(store, HTML_FOLDER);
 
         System.out.println("MONITORING SERVER");
         System.out.println("Agents send data to : port " + UDP_PORT + " (UDP)");
         System.out.println("Dashboard           : http://localhost:" + HTTP_PORT + "/");
+        System.out.println("Database            : " + DB_PATH);
         System.out.println();
 
         new Thread(() -> listenUdp(store)).start();

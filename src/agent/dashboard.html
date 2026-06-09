@@ -3,10 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>System Agent — Ooredoo</title>
+  <title>System Agent</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
       --bg:      #0d1117;
       --surface: #161b22;
@@ -21,506 +20,671 @@
       --danger:  #f85149;
       --radius:  10px;
     }
+    body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; min-height:100vh; padding:24px; }
 
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      min-height: 100vh;
-      padding: 24px;
-    }
+    header { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; flex-wrap:wrap; gap:12px; }
+    .header-left { display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+    .logo { display:flex; align-items:center; gap:12px; }
+    .logo-dot { width:40px; height:40px; border-radius:50%; background:linear-gradient(135deg,#e8003d,#ff5b7d); display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:900; color:#fff; }
+    h1 { font-size:1.3rem; font-weight:700; }
+    .header-right { display:flex; align-items:center; gap:12px; }
+    #clock { font-size:0.85rem; color:var(--muted); }
+    #status-pill { padding:5px 14px; border-radius:20px; font-size:0.75rem; font-weight:600; background:#1a2a1a; color:var(--mem); border:1px solid var(--mem); transition:all .3s; }
+    #status-pill.error { background:#2a1a1a; color:var(--danger); border-color:var(--danger); }
+    #status-pill.warn  { background:#2a2212; color:var(--warn);   border-color:var(--warn); }
 
-    /* ── Header ── */
-    header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 24px;
-      flex-wrap: wrap;
-      gap: 12px;
-    }
+    .page-nav { display:flex; gap:4px; }
+    .page-tab { padding:6px 16px; border-radius:6px; cursor:pointer; font-size:0.8rem; font-weight:600; background:transparent; border:1px solid transparent; color:var(--muted); transition:all .15s; }
+    .page-tab:hover { color:var(--text); }
+    .page-tab.active { background:#1c2128; border-color:var(--border); color:var(--text); }
 
-    .logo { display: flex; align-items: center; gap: 12px; }
+    #tabs-bar { display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; }
+    .tab { padding:6px 16px; border-radius:6px; cursor:pointer; font-size:0.78rem; font-weight:600; background:var(--surface); border:1px solid var(--border); color:var(--muted); transition:all .15s; }
+    .tab:hover { color:var(--text); }
+    .tab.active { background:#1a2d4a; border-color:var(--accent); color:var(--accent); }
+    .tab .dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:7px; vertical-align:middle; }
+    .tab.ok      .dot { background:var(--mem); }
+    .tab.warn    .dot { background:var(--warn); }
+    .tab.high    .dot { background:var(--danger); }
+    .tab.offline .dot { background:#444d56; }
+    .tab.offline { opacity:0.6; }
 
-    .logo-dot {
-      width: 40px; height: 40px; border-radius: 50%;
-      background: linear-gradient(135deg, #e8003d, #ff5b7d);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 18px; font-weight: 900; color: #fff;
-    }
+    #waiting { text-align:center; padding:80px 20px; color:var(--muted); }
 
-    h1 { font-size: 1.3rem; font-weight: 700; }
-    h1 span { display: block; font-size: 0.8rem; color: var(--muted); font-weight: 400; }
+    .kpi-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-bottom:14px; }
+    .kpi-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px; position:relative; overflow:hidden; }
+    .kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+    .kpi-card.cpu::before  { background:var(--cpu); }
+    .kpi-card.mem::before  { background:var(--mem); }
+    .kpi-card.disk::before { background:var(--disk); }
+    .kpi-label { font-size:0.7rem; font-weight:600; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-bottom:10px; }
+    .kpi-value { font-size:2.6rem; font-weight:700; line-height:1; }
+    .kpi-card.cpu  .kpi-value { color:var(--cpu); }
+    .kpi-card.mem  .kpi-value { color:var(--mem); }
+    .kpi-card.disk .kpi-value { color:var(--disk); }
+    .kpi-sub { font-size:0.75rem; color:var(--muted); margin-top:8px; }
+    .gauge-track { height:5px; background:var(--border); border-radius:3px; margin-top:14px; overflow:hidden; }
+    .gauge-fill { height:100%; border-radius:3px; transition:width .5s ease; }
+    .kpi-card.cpu  .gauge-fill { background:var(--cpu); }
+    .kpi-card.mem  .gauge-fill { background:var(--mem); }
+    .kpi-card.disk .gauge-fill { background:var(--disk); }
 
-    .header-right { display: flex; align-items: center; gap: 12px; }
+    .chart-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; margin-bottom:14px; }
+    .chart-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px 18px; }
+    .chart-label { font-size:0.7rem; font-weight:600; letter-spacing:.8px; text-transform:uppercase; color:var(--muted); margin-bottom:12px; }
+    canvas { display:block; width:100%; }
 
-    #clock { font-size: 0.85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .log-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px; }
+    .log-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+    .log-title { font-size:0.7rem; font-weight:600; letter-spacing:.8px; text-transform:uppercase; color:var(--muted); }
+    #log-count { font-size:0.72rem; color:var(--accent); }
+    #log-body { max-height:210px; overflow-y:auto; }
+    table { width:100%; border-collapse:collapse; font-size:0.78rem; }
+    thead th { text-align:left; padding:8px 10px; color:var(--muted); font-weight:600; border-bottom:1px solid var(--border); font-size:0.7rem; white-space:nowrap; }
+    tbody tr { border-bottom:1px solid var(--border); }
+    tbody tr:last-child { border-bottom:none; }
+    tbody td { padding:7px 10px; }
+    tbody tr:hover { background:#1c2128; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:0.68rem; font-weight:600; }
+    .badge-ok     { background:#1a2a1a; color:var(--mem); }
+    .badge-warn   { background:#2a2212; color:var(--warn); }
+    .badge-danger { background:#2a1212; color:var(--danger); }
 
-    #status-pill {
-      padding: 5px 14px; border-radius: 20px;
-      font-size: 0.75rem; font-weight: 600;
-      background: #1a2a1a; color: var(--mem); border: 1px solid var(--mem);
-      transition: all .3s;
-    }
-    #status-pill.error { background: #2a1a1a; color: var(--danger); border-color: var(--danger); }
-    #status-pill.warn  { background: #2a2212; color: var(--warn);   border-color: var(--warn); }
+    /* multi-view */
+    .mv-triple { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:14px; }
+    .mv-legend-wrap { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px 18px; margin-bottom:14px; }
+    .mv-legend { display:flex; gap:20px; flex-wrap:wrap; margin-top:8px; }
+    .mv-legend-machine { display:flex; flex-direction:column; gap:6px; padding-right:20px; border-right:1px solid var(--border); }
+    .mv-legend-machine:last-child { border-right:none; }
+    .mv-legend-name { font-size:0.72rem; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+    .mv-legend-metrics { display:flex; gap:12px; }
+    .mv-legend-item { display:flex; align-items:center; gap:6px; font-size:0.78rem; color:var(--text); }
+    .mv-legend-dot { width:10px; height:10px; border-radius:50%; }
+    .mv-empty { text-align:center; padding:60px 20px; color:var(--muted); font-size:0.9rem; }
 
-    /* ── Machine Tabs ── */
-    #tabs-bar {
-      display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;
-    }
-
-    .tab {
-      padding: 6px 16px; border-radius: 6px; cursor: pointer;
-      font-size: 0.78rem; font-weight: 600;
-      background: var(--surface); border: 1px solid var(--border);
-      color: var(--muted); transition: all .15s;
-    }
-    .tab:hover { color: var(--text); border-color: #30363d; }
-    .tab.active { background: #1a2d4a; border-color: var(--accent); color: var(--accent); }
-
-    .tab .dot {
-      display: inline-block; width: 7px; height: 7px;
-      border-radius: 50%; margin-right: 7px; vertical-align: middle;
-    }
-    .tab.ok   .dot { background: var(--mem); }
-    .tab.warn .dot { background: var(--warn); }
-    .tab.high .dot { background: var(--danger); }
-
-    /* ── Waiting state (shown before any agent connects) ── */
-    #waiting {
-      text-align: center; padding: 80px 20px; color: var(--muted);
-    }
-    #waiting p { font-size: 0.9rem; }
-
-    /* ── KPI Cards ── */
-    .kpi-row {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 14px; margin-bottom: 14px;
-    }
-
-    .kpi-card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 18px 20px;
-      position: relative; overflow: hidden;
-    }
-    .kpi-card::before {
-      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-    }
-    .kpi-card.cpu::before  { background: var(--cpu); }
-    .kpi-card.mem::before  { background: var(--mem); }
-    .kpi-card.disk::before { background: var(--disk); }
-
-    .kpi-label {
-      font-size: 0.7rem; font-weight: 600; letter-spacing: 1px;
-      text-transform: uppercase; color: var(--muted); margin-bottom: 10px;
-    }
-    .kpi-value {
-      font-size: 2.6rem; font-weight: 700; line-height: 1;
-      font-variant-numeric: tabular-nums;
-    }
-    .kpi-card.cpu  .kpi-value { color: var(--cpu); }
-    .kpi-card.mem  .kpi-value { color: var(--mem); }
-    .kpi-card.disk .kpi-value { color: var(--disk); }
-
-    .kpi-sub { font-size: 0.75rem; color: var(--muted); margin-top: 8px; }
-
-    .gauge-track {
-      height: 5px; background: var(--border); border-radius: 3px;
-      margin-top: 14px; overflow: hidden;
-    }
-    .gauge-fill { height: 100%; border-radius: 3px; transition: width .5s ease; }
-    .kpi-card.cpu  .gauge-fill { background: var(--cpu); }
-    .kpi-card.mem  .gauge-fill { background: var(--mem); }
-    .kpi-card.disk .gauge-fill { background: var(--disk); }
-
-    /* ── Charts ── */
-    .chart-row {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 14px; margin-bottom: 14px;
-    }
-
-    .chart-card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 16px 18px;
-    }
-    .chart-label {
-      font-size: 0.7rem; font-weight: 600; letter-spacing: .8px;
-      text-transform: uppercase; color: var(--muted); margin-bottom: 12px;
-    }
-    canvas { width: 100%; display: block; }
-
-    /* ── Log Table ── */
-    .log-card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 18px 20px;
-    }
-    .log-header {
-      display: flex; justify-content: space-between; align-items: center;
-      margin-bottom: 14px;
-    }
-    .log-title {
-      font-size: 0.7rem; font-weight: 600; letter-spacing: .8px;
-      text-transform: uppercase; color: var(--muted);
-    }
-    #log-count { font-size: 0.72rem; color: var(--accent); }
-
-    #log-body { max-height: 210px; overflow-y: auto; }
-
-    table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
-    thead th {
-      text-align: left; padding: 8px 10px; color: var(--muted);
-      font-weight: 600; border-bottom: 1px solid var(--border);
-      font-size: 0.7rem; letter-spacing: .5px; white-space: nowrap;
-    }
-    tbody tr { border-bottom: 1px solid var(--border); }
-    tbody tr:last-child { border-bottom: none; }
-    tbody td { padding: 7px 10px; font-variant-numeric: tabular-nums; }
-    tbody tr:hover { background: #1c2128; }
-
-    .badge {
-      display: inline-block; padding: 2px 8px; border-radius: 4px;
-      font-size: 0.68rem; font-weight: 600;
-    }
-    .badge-ok     { background: #1a2a1a; color: var(--mem); }
-    .badge-warn   { background: #2a2212; color: var(--warn); }
-    .badge-danger { background: #2a1212; color: var(--danger); }
-
-    /* ── Footer ── */
-    footer {
-      text-align: center; margin-top: 24px;
-      font-size: 0.72rem; color: #444d56;
-    }
+    footer { text-align:center; margin-top:24px; font-size:0.72rem; color:#444d56; }
+    @media (max-width:700px) { .mv-triple { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
 
-  <!-- Header -->
-  <header>
+<header>
+  <div class="header-left">
     <div class="logo">
       <div class="logo-dot">O</div>
-      <div>
-        <h1>System Agent</h1>
-      </div>
+      <div><h1>System Agent</h1></div>
     </div>
-    <div class="header-right">
-      <span id="clock">--:--:--</span>
-      <div id="status-pill">● CONNECTING…</div>
-    </div>
-  </header>
-
-  <!-- One tab per machine — filled in by JavaScript -->
-  <div id="tabs-bar"></div>
-
-  <!-- Shown before any agent connects -->
-  <div id="waiting">
-    <p>⏳ Waiting for agents to connect…</p>
+    <nav class="page-nav">
+      <div class="page-tab active" id="tab-main" onclick="showPage('main')">System Agent</div>
+      <div class="page-tab"        id="tab-mv"   onclick="showPage('mv')">Multi-View</div>
+      <div class="page-tab"        id="tab-history" onclick="showPage('history')">History</div>
+    </nav>
   </div>
+  <div class="header-right">
+    <span id="clock">--:--:--</span>
+    <div id="status-pill">● CONNECTING…</div>
+    <a href="/login" onclick="sessionStorage.removeItem('sa_auth')" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:5px 12px;border-radius:6px;cursor:pointer;font-size:0.75rem;font-family:inherit;text-decoration:none;display:inline-block">Sign out</a>
+  </div>
+</header>
 
-  <!-- Main dashboard — hidden until data arrives -->
+<!-- MAIN PAGE -->
+<div id="page-main">
+  <div id="tabs-bar"></div>
+  <div id="waiting"><p>⏳ Waiting for agents to connect…</p></div>
   <div id="dashboard" style="display:none">
-
-    <!-- KPI cards -->
     <div class="kpi-row">
       <div class="kpi-card cpu">
         <div class="kpi-label">CPU Usage</div>
         <div class="kpi-value" id="cpu-val">—</div>
-        <div class="kpi-sub"  id="cpu-sub">Processor load</div>
+        <div class="kpi-sub" id="cpu-sub">Processor load</div>
         <div class="gauge-track"><div class="gauge-fill" id="cpu-gauge" style="width:0%"></div></div>
       </div>
       <div class="kpi-card mem">
         <div class="kpi-label">Memory</div>
         <div class="kpi-value" id="mem-val">—</div>
-        <div class="kpi-sub"  id="mem-sub">—</div>
+        <div class="kpi-sub" id="mem-sub">—</div>
         <div class="gauge-track"><div class="gauge-fill" id="mem-gauge" style="width:0%"></div></div>
       </div>
       <div class="kpi-card disk">
         <div class="kpi-label">Disk Usage</div>
         <div class="kpi-value" id="disk-val">—</div>
-        <div class="kpi-sub"  id="disk-sub">—</div>
+        <div class="kpi-sub" id="disk-sub">—</div>
         <div class="gauge-track"><div class="gauge-fill" id="disk-gauge" style="width:0%"></div></div>
       </div>
     </div>
-
-    <!-- Line graphs -->
     <div class="chart-row">
-      <div class="chart-card">
-        <div class="chart-label">CPU History</div>
-        <canvas id="cpu-chart" height="110"></canvas>
-      </div>
-      <div class="chart-card">
-        <div class="chart-label">Memory History</div>
-        <canvas id="mem-chart" height="110"></canvas>
-      </div>
-      <div class="chart-card">
-        <div class="chart-label">Disk History</div>
-        <canvas id="disk-chart" height="110"></canvas>
-      </div>
+      <div class="chart-card"><div class="chart-label">CPU History</div><canvas id="cpu-chart" height="110"></canvas></div>
+      <div class="chart-card"><div class="chart-label">Memory History</div><canvas id="mem-chart" height="110"></canvas></div>
+      <div class="chart-card"><div class="chart-label">Disk History</div><canvas id="disk-chart" height="110"></canvas></div>
     </div>
-
-    <!-- Log table -->
     <div class="log-card">
-      <div class="log-header">
-        <span class="log-title">Recent Readings</span>
-        <span id="log-count"></span>
-      </div>
+      <div class="log-header"><span class="log-title">Recent Readings</span><span id="log-count"></span></div>
       <div id="log-body">
         <table>
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Machine</th>
-              <th>CPU %</th>
-              <th>RAM %</th>
-              <th>RAM Used</th>
-              <th>RAM Total</th>
-              <th>Disk %</th>
-              <th>Disk Used</th>
-              <th>Disk Total</th>
-              <th>Status</th>
-            </tr>
-          </thead>
+          <thead><tr><th>Time</th><th>Machine</th><th>CPU %</th><th>RAM %</th><th>RAM Used</th><th>RAM Total</th><th>Disk %</th><th>Disk Used</th><th>Disk Total</th><th>Status</th></tr></thead>
           <tbody id="log-rows"></tbody>
         </table>
       </div>
     </div>
+  </div>
+</div>
 
-  </div><!-- end #dashboard -->
+<!-- MULTI-VIEW PAGE -->
+<div id="page-mv" style="display:none">
+  <div id="mv-empty" class="mv-empty"><p>⏳ Waiting for agents to connect…</p></div>
+  <div id="mv-content" style="display:none">
+    <div class="mv-legend-wrap">
+      <div class="mv-legend" id="mv-legend"></div>
+    </div>
+    <div class="mv-triple">
+      <div class="chart-card"><div class="chart-label">CPU Usage</div><canvas id="mv-cpu" height="160"></canvas></div>
+      <div class="chart-card"><div class="chart-label">Memory Usage</div><canvas id="mv-mem" height="160"></canvas></div>
+      <div class="chart-card"><div class="chart-label">Disk Usage</div><canvas id="mv-disk" height="160"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-label">Overview</div>
+      <div class="mv-legend" id="mv-metric-legend" style="margin-bottom:10px"></div>
+      <canvas id="mv-all" height="260"></canvas>
+    </div>
+  </div>
+</div>
 
-  <footer>System Agent v2.0 &nbsp;·&nbsp; Refresh: <span id="next-tick">1.5s</span></footer>
+<footer>System Agent v2.0 &nbsp;·&nbsp; Refresh: 1.5s</footer>
 
 <script>
-// ── Clock in the top-right corner ────────────────────────────────────────────
+// auth check — runs every time the page loads
+// if not logged in, redirect to login page
+if (!sessionStorage.getItem('sa_auth')) {
+  window.location.replace('/login');
+}
+
+// unique colour per machine (for top 3 comparison charts)
+const MACHINE_COLORS = ['#58a6ff','#e3b341','#3fb950','#f78166','#d2a8ff','#79c0ff'];
+function machineColor(i) { return MACHINE_COLORS[i % MACHINE_COLORS.length]; }
+
+// fixed metric colours (for overview chart)
+const CPU_COLOR  = '#f78166';
+const MEM_COLOR  = '#3fb950';
+const DISK_COLOR = '#d2a8ff';
+
+// clock
 function updateClock() {
   const t = new Date();
-  const h = String(t.getHours()).padStart(2, '0');
-  const m = String(t.getMinutes()).padStart(2, '0');
-  const s = String(t.getSeconds()).padStart(2, '0');
-  document.getElementById('clock').textContent = h + ':' + m + ':' + s;
+  document.getElementById('clock').textContent =
+    String(t.getHours()).padStart(2,'0')+':'+
+    String(t.getMinutes()).padStart(2,'0')+':'+
+    String(t.getSeconds()).padStart(2,'0');
 }
-setInterval(updateClock, 1000);
-updateClock();
+setInterval(updateClock,1000); updateClock();
 
-// ── Simple line chart drawn on an HTML5 Canvas (no libraries) ────────────────
-class LineChart {
-  constructor(canvasId, color) {
-    this.canvas = document.getElementById(canvasId);
-    this.ctx    = this.canvas.getContext('2d');
-    this.color  = color;
-    this.data   = [];
+// page nav
+function showPage(name) {
+  currentPage = name;
+  document.getElementById('page-main').style.display    = name==='main'    ? '' : 'none';
+  document.getElementById('page-mv').style.display      = name==='mv'      ? '' : 'none';
+  document.getElementById('page-history').style.display = name==='history' ? '' : 'none';
+  document.getElementById('tab-main').className    = 'page-tab'+(name==='main'   ?' active':'');
+  document.getElementById('tab-mv').className      = 'page-tab'+(name==='mv'     ?' active':'');
+  document.getElementById('tab-history').className = 'page-tab'+(name==='history'?' active':'');
+  if (name==='history') { populateHistorySelects(); loadHistory(0); loadStats(); loadUptime(); }
+}
 
-    // fix blurry lines on high-DPI screens
-    const dpr  = window.devicePixelRatio || 1;
-    const rect = this.canvas.getBoundingClientRect();
-    this.w = rect.width  || 400;
-    this.h = rect.height || 110;
-    this.canvas.width  = this.w * dpr;
-    this.canvas.height = this.h * dpr;
-    this.ctx.scale(dpr, dpr);
+// set up canvas pixel size and return {ctx,w,h}
+function setupCanvas(id, height) {
+  const canvas = document.getElementById(id);
+  const dpr = window.devicePixelRatio || 1;
+  const w   = canvas.parentElement.clientWidth - 36;
+  const h   = height;
+  canvas.width        = w * dpr;
+  canvas.height       = h * dpr;
+  canvas.style.width  = w + 'px';
+  canvas.style.height = h + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  return { ctx, w, h };
+}
+
+// draw grid lines
+function grid(ctx, w, h) {
+  ctx.strokeStyle = '#21262d'; ctx.lineWidth = 1;
+  [25,50,75].forEach(pct => {
+    const y = h - (pct/100)*h;
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
+    ctx.fillStyle = '#555'; ctx.font = '9px monospace';
+    ctx.fillText(pct+'%', 3, y-3);
+  });
+}
+
+// draw one line with gradient fill
+function drawLine(ctx, w, h, series, color, withFill) {
+  if (!series || series.length < 2) return;
+  const step = w / (series.length-1);
+  if (withFill) {
+    const g = ctx.createLinearGradient(0,0,0,h);
+    g.addColorStop(0, color+'33'); g.addColorStop(1, color+'00');
+    ctx.beginPath(); ctx.moveTo(0,h);
+    series.forEach((pt,i) => ctx.lineTo(i*step, h-(pt.v/100)*h));
+    ctx.lineTo((series.length-1)*step, h);
+    ctx.closePath(); ctx.fillStyle=g; ctx.fill();
   }
+  ctx.beginPath(); ctx.strokeStyle=color; ctx.lineWidth=1.6; ctx.lineJoin='round';
+  series.forEach((pt,i) => { const x=i*step,y=h-(pt.v/100)*h; i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
+  ctx.stroke();
+  const last=series[series.length-1];
+  ctx.beginPath(); ctx.arc((series.length-1)*step, h-(last.v/100)*h, 3.5, 0, Math.PI*2);
+  ctx.fillStyle=color; ctx.fill();
+}
 
-  // call this with a new array of {t, v} points to redraw the chart
-  update(series) {
-    this.data = series;
-    this.draw();
-  }
+// draw multiple lines on same canvas with labels at end
+function drawMulti(ctx, w, h, datasets) {
+  if (!datasets || datasets.length===0) return;
+  const maxLen = datasets.reduce((m,d)=>Math.max(m,d.series?d.series.length:0),0);
+  if (maxLen < 2) return;
+  const rMargin = 140;
+  const dw = w - rMargin;
+  grid(ctx, w, h);
+  datasets.forEach(({label, color, series}) => {
+    if (!series || series.length < 2) return;
+    const step   = dw / (maxLen-1);
+    const offset = maxLen - series.length;
+    ctx.beginPath(); ctx.strokeStyle=color; ctx.lineWidth=1.4; ctx.lineJoin='round';
+    series.forEach((pt,i) => { const x=(i+offset)*step, y=h-(pt.v/100)*h; i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
+    ctx.stroke();
+    const last=series[series.length-1];
+    const ex=(maxLen-1)*step, ey=h-(last.v/100)*h;
+    ctx.beginPath(); ctx.arc(ex,ey,3.5,0,Math.PI*2); ctx.fillStyle=color; ctx.fill();
+    ctx.fillStyle=color; ctx.font='bold 11px Segoe UI,sans-serif';
+    ctx.fillText(label+'  '+last.v.toFixed(1)+'%', ex+8, ey+4);
+  });
+}
 
-  draw() {
-    const { ctx, w, h, data, color } = this;
-    ctx.clearRect(0, 0, w, h);
+// main page single charts
+function drawMainChart(id, series, color) {
+  const {ctx,w,h} = setupCanvas(id, 110);
+  ctx.clearRect(0,0,w,h); grid(ctx,w,h);
+  drawLine(ctx,w,h,series,color,true);
+}
 
-    // draw horizontal grid lines at 25%, 50%, 75%
-    ctx.strokeStyle = '#21262d';
-    ctx.lineWidth   = 1;
-    [25, 50, 75].forEach(pct => {
-      const y = h - (pct / 100) * h;
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
-      ctx.fillStyle = '#555'; ctx.font = '9px monospace';
-      ctx.fillText(pct + '%', 3, y - 3);
-    });
+// multi-view comparison chart
+function drawCompChart(id, datasets, height) {
+  const {ctx,w,h} = setupCanvas(id, height);
+  ctx.clearRect(0,0,w,h);
+  drawMulti(ctx,w,h,datasets);
+}
 
-    if (data.length < 2) return;
+// overview chart — all metrics all machines, shared 0-100% axis
+// each machine gets a different dash pattern, each metric keeps its color
+function drawOverview(id, machines, data) {
+  const {ctx,w,h} = setupCanvas(id, 260);
+  ctx.clearRect(0,0,w,h);
 
-    // spread points evenly across the width
-    const step = w / (data.length - 1);
+  // dash patterns per machine: solid, dashed, dotted, dash-dot
+  const DASH_PATTERNS = [[],[6,4],[2,3],[8,3,2,3]];
 
-    // draw the filled area under the line
-    const gradient = ctx.createLinearGradient(0, 0, 0, h);
-    gradient.addColorStop(0, color + '44');
-    gradient.addColorStop(1, color + '00');
-    ctx.beginPath();
-    ctx.moveTo(0, h);
-    data.forEach((pt, i) => {
-      ctx.lineTo(i * step, h - (pt.v / 100) * h);
-    });
-    ctx.lineTo((data.length - 1) * step, h);
-    ctx.closePath();
-    ctx.fillStyle = gradient;
-    ctx.fill();
+  const all = [];
+  machines.forEach((name,i) => {
+    const d = data[name]; if (!d) return;
+    const dash = DASH_PATTERNS[i] || DASH_PATTERNS[1];
+    all.push({label:name, color:CPU_COLOR,  series:d.cpu,  dash});
+    all.push({label:name, color:MEM_COLOR,  series:d.mem,  dash});
+    all.push({label:name, color:DISK_COLOR, series:d.disk, dash});
+  });
 
-    // draw the line itself
-    ctx.beginPath();
-    ctx.strokeStyle = color;
-    ctx.lineWidth   = 1.8;
-    ctx.lineJoin    = 'round';
-    data.forEach((pt, i) => {
-      const x = i * step;
-      const y = h - (pt.v / 100) * h;
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  if (all.length===0) return;
+  const maxLen = all.reduce((m,d)=>Math.max(m,d.series?d.series.length:0),0);
+  if (maxLen < 2) return;
+
+  const rMargin = 120;
+  const dw = w - rMargin;
+
+  grid(ctx,w,h);
+
+  // track last y position per machine+color to stack labels cleanly
+  const labelPositions = {};
+
+  all.forEach(({label, color, series, dash}) => {
+    if (!series || series.length < 2) return;
+    const step   = dw / (maxLen-1);
+    const offset = maxLen - series.length;
+
+    ctx.setLineDash(dash);
+    ctx.beginPath(); ctx.strokeStyle=color; ctx.lineWidth=1.5; ctx.lineJoin='round';
+    series.forEach((pt,i) => {
+      const x=(i+offset)*step, y=h-(pt.v/100)*h;
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
     });
     ctx.stroke();
+    ctx.setLineDash([]);
 
-    // draw a dot at the latest value
-    const last = data[data.length - 1];
-    const lx = (data.length - 1) * step;
-    const ly = h - (last.v / 100) * h;
-    ctx.beginPath();
-    ctx.arc(lx, ly, 3.5, 0, Math.PI * 2);
-    ctx.fillStyle = color;
-    ctx.fill();
-  }
+    // dot at end
+    const last=series[series.length-1];
+    const ex=(maxLen-1)*step, ey=h-(last.v/100)*h;
+    ctx.beginPath(); ctx.arc(ex,ey,3,0,Math.PI*2);
+    ctx.fillStyle=color; ctx.fill();
+
+    // label: just "NAFISA  73.6%" — one label per machine per color
+    const key = label+color;
+    if (!labelPositions[key]) {
+      labelPositions[key] = ey;
+      ctx.fillStyle=color; ctx.font='bold 11px Segoe UI,sans-serif';
+      ctx.fillText(label+'  '+last.v.toFixed(1)+'%', ex+8, ey+4);
+    }
+  });
 }
 
-// create the three charts
-const cpuChart  = new LineChart('cpu-chart',  '#f78166');
-const memChart  = new LineChart('mem-chart',  '#3fb950');
-const diskChart = new LineChart('disk-chart', '#d2a8ff');
+// state
+let activeMachine = null;
+let currentPage = 'main';
+const logRows = []; const seenKeys = new Set();
 
-// ── State ─────────────────────────────────────────────────────────────────────
-let activeMachine = null;  // which machine tab is selected
-const MAX_LOG = 60;        // how many rows to show in the log table
-const logRows = [];        // array of log entries (newest first)
-const seenKeys = new Set(); // used to avoid adding the same reading twice
-
-// ── Main update function ──────────────────────────────────────────────────────
 async function fetchAndRender() {
   try {
-    const response = await fetch('/data');
-    const json     = await response.json();
+    const json = await (await fetch('/data')).json();
+    const machines = json.machines;
+    if (machines.length===0) return;
 
-    const machines = json.machines;  // e.g. ["NAFISA", "PC2"]
-
-    if (machines.length === 0) return;  // no agents connected yet
-
-    // hide the waiting message, show the dashboard
     document.getElementById('waiting').style.display   = 'none';
     document.getElementById('dashboard').style.display = '';
+    if (!activeMachine || !machines.includes(activeMachine)) activeMachine = machines[0];
+    allMachines = machines;
 
-    // if no tab is selected yet (or selected machine disconnected), pick the first one
-    if (!activeMachine || !machines.includes(activeMachine)) {
-      activeMachine = machines[0];
-    }
-
-    // draw tabs across the top
     renderTabs(machines, json.data);
 
-    // get the data for the currently selected machine
-    const machineData = json.data[activeMachine];
-    if (!machineData || !machineData.latest) return;
-    const latest = machineData.latest;
+    const md = json.data[activeMachine];
+    if (md && md.latest) {
+      const l = md.latest;
+      document.getElementById('cpu-val').textContent  = l.cpu.toFixed(1)+'%';
+      document.getElementById('mem-val').textContent  = l.mem.toFixed(1)+'%';
+      document.getElementById('disk-val').textContent = l.disk.toFixed(1)+'%';
+      document.getElementById('mem-sub').textContent  = l.memUsed+' / '+l.memTotal;
+      document.getElementById('disk-sub').textContent = l.diskUsed+' / '+l.diskTotal;
+      document.getElementById('cpu-gauge').style.width  = l.cpu+'%';
+      document.getElementById('mem-gauge').style.width  = l.mem+'%';
+      document.getElementById('disk-gauge').style.width = l.disk+'%';
+      const pill=document.getElementById('status-pill');
+      const worst=Math.max(l.cpu,l.mem,l.disk);
+      if (worst>=90)      {pill.textContent='● HIGH LOAD';pill.className='error';}
+      else if (worst>=70) {pill.textContent='● WARNING';  pill.className='warn'; }
+      else                {pill.textContent='● LIVE';     pill.className='';     }
+      drawMainChart('cpu-chart',  md.cpu,  CPU_COLOR);
+      drawMainChart('mem-chart',  md.mem,  MEM_COLOR);
+      drawMainChart('disk-chart', md.disk, DISK_COLOR);
+    }
 
-    // update the three KPI cards
-    document.getElementById('cpu-val').textContent  = latest.cpu.toFixed(1) + '%';
-    document.getElementById('mem-val').textContent  = latest.mem.toFixed(1) + '%';
-    document.getElementById('disk-val').textContent = latest.disk.toFixed(1) + '%';
-    document.getElementById('mem-sub').textContent  = latest.memUsed + ' / ' + latest.memTotal;
-    document.getElementById('disk-sub').textContent = latest.diskUsed + ' / ' + latest.diskTotal;
+    machines.forEach(name => { const d=json.data[name]; if(d&&d.latest) addLogRow(d.latest); });
+    renderMultiView(machines, json.data);
+    // update history page only if currently visible
+    if (currentPage === 'history') { loadUptime(); loadStats(); }
 
-    document.getElementById('cpu-gauge').style.width  = latest.cpu  + '%';
-    document.getElementById('mem-gauge').style.width  = latest.mem  + '%';
-    document.getElementById('disk-gauge').style.width = latest.disk + '%';
-
-    // update the status pill
-    const pill  = document.getElementById('status-pill');
-    const worst = Math.max(latest.cpu, latest.mem, latest.disk);
-    if (worst >= 90)      { pill.textContent = '● HIGH LOAD'; pill.className = 'error'; }
-    else if (worst >= 70) { pill.textContent = '● WARNING';   pill.className = 'warn';  }
-    else                  { pill.textContent = '● LIVE';       pill.className = '';      }
-
-    // update the charts
-    cpuChart.update(machineData.cpu);
-    memChart.update(machineData.mem);
-    diskChart.update(machineData.disk);
-
-    // add a log row for every machine's latest reading
-    machines.forEach(name => {
-      const d = json.data[name];
-      if (d && d.latest) addLogRow(d.latest);
-    });
-
-    document.getElementById('next-tick').textContent = '1.5s';
-
-  } catch (e) {
-    // if the fetch failed, show the server as offline
-    const pill = document.getElementById('status-pill');
-    pill.textContent = '● OFFLINE';
-    pill.className   = 'error';
+  } catch(e) {
+    const pill=document.getElementById('status-pill');
+    pill.textContent='● OFFLINE'; pill.className='error';
   }
 }
 
-// draws the machine tabs at the top of the page
+function renderMultiView(machines, data) {
+  if (machines.length===0) {
+    document.getElementById('mv-empty').style.display=''; document.getElementById('mv-content').style.display='none'; return;
+  }
+  document.getElementById('mv-empty').style.display='none'; document.getElementById('mv-content').style.display='';
+
+  // machines legend (top)
+  document.getElementById('mv-legend').innerHTML =
+    '<div class="mv-legend-machine">' +
+    '<div class="mv-legend-name">Machines</div>' +
+    '<div class="mv-legend-metrics">' +
+    machines.map((name,i) =>
+      '<div class="mv-legend-item"><div class="mv-legend-dot" style="background:'+machineColor(i)+'"></div>'+name+'</div>'
+    ).join('') +
+    '</div></div>';
+
+  // metrics legend (above overview chart) - shows line styles
+  const dashLabels = ['Solid','Dashed','Dotted','Dash-Dot'];
+  document.getElementById('mv-metric-legend').innerHTML =
+    '<div class="mv-legend-item"><div class="mv-legend-dot" style="background:'+CPU_COLOR+'"></div>CPU</div>' +
+    '<div class="mv-legend-item"><div class="mv-legend-dot" style="background:'+MEM_COLOR+'"></div>Memory</div>' +
+    '<div class="mv-legend-item"><div class="mv-legend-dot" style="background:'+DISK_COLOR+'"></div>Disk</div>' +
+    '<span style="width:1px;background:var(--border);height:14px;margin:0 8px"></span>' +
+    machines.map((name,i) => {
+      const dash = i===0 ? '10,0' : i===1 ? '6,4' : i===2 ? '2,3' : '8,3,2,3';
+      return '<div class="mv-legend-item">'+
+        '<svg width="24" height="12" style="flex-shrink:0"><line x1="0" y1="6" x2="24" y2="6" stroke="'+CPU_COLOR+'" stroke-width="2" stroke-dasharray="'+dash+'"/></svg>'+
+        name+'</div>';
+    }).join('');
+
+  // top 3: each machine gets its unique colour
+  // only show live series for online machines — offline machines show no line
+  const cpuDS  = machines.map((n,i)=>({label:n, color:machineColor(i), series:data[n]&&data[n].online?data[n].cpu :[]}));
+  const memDS  = machines.map((n,i)=>({label:n, color:machineColor(i), series:data[n]&&data[n].online?data[n].mem :[]}));
+  const diskDS = machines.map((n,i)=>({label:n, color:machineColor(i), series:data[n]&&data[n].online?data[n].disk:[]}));
+
+  drawCompChart('mv-cpu',  cpuDS,  160);
+  drawCompChart('mv-mem',  memDS,  160);
+  drawCompChart('mv-disk', diskDS, 160);
+  drawOverview('mv-all', machines, data);
+}
+
 function renderTabs(machines, data) {
-  const bar = document.getElementById('tabs-bar');
-  bar.innerHTML = machines.map(name => {
-    const d = data[name];
-    const worst = d && d.latest ? Math.max(d.latest.cpu, d.latest.mem, d.latest.disk) : 0;
-    const statusClass = worst >= 90 ? 'high' : worst >= 70 ? 'warn' : 'ok';
-    const activeClass = name === activeMachine ? ' active' : '';
-    return '<div class="tab ' + statusClass + activeClass + '" onclick="switchTab(\'' + name + '\')">'
-         + '<span class="dot"></span>' + name + '</div>';
+  document.getElementById('tabs-bar').innerHTML = machines.map(name => {
+    const d=data[name]; const worst=d&&d.latest?Math.max(d.latest.cpu,d.latest.mem,d.latest.disk):0;
+    const sc=worst>=90?'high':worst>=70?'warn':'ok'; const ac=name===activeMachine?' active':'';
+    return '<div class="tab '+sc+ac+'" onclick="switchTab(\''+name+'\')"><span class="dot"></span>'+name+'</div>';
   }).join('');
 }
 
-// called when the user clicks a machine tab
-function switchTab(name) {
-  activeMachine = name;
-  fetchAndRender();
-}
+function switchTab(name) { activeMachine=name; fetchAndRender(); }
 
-// adds one row to the log table (avoids duplicates using timestamp + machine name)
 function addLogRow(snap) {
-  const key = snap.machine + ':' + snap.ts;
-  if (seenKeys.has(key)) return;
-  seenKeys.add(key);
-
-  const t = new Date(snap.ts);
-  const timeStr = String(t.getHours()).padStart(2, '0') + ':'
-                + String(t.getMinutes()).padStart(2, '0') + ':'
-                + String(t.getSeconds()).padStart(2, '0');
-
-  logRows.unshift({ time: timeStr, ...snap });  // add to the front (newest first)
-  if (logRows.length > MAX_LOG) logRows.pop();  // remove the oldest if over limit
-
-  renderLogTable();
+  const key=snap.machine+':'+snap.ts; if(seenKeys.has(key)) return; seenKeys.add(key);
+  const t=new Date(snap.ts);
+  const ts=String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0')+':'+String(t.getSeconds()).padStart(2,'0');
+  logRows.unshift({time:ts,...snap}); if(logRows.length>60) logRows.pop(); renderLogTable();
 }
 
-// redraws the whole log table from the logRows array
 function renderLogTable() {
-  document.getElementById('log-count').textContent = logRows.length + ' readings';
-  document.getElementById('log-rows').innerHTML = logRows.map(r => {
-    const worst = Math.max(r.cpu, r.mem, r.disk);
-    const badgeClass = worst >= 90 ? 'badge-danger' : worst >= 70 ? 'badge-warn' : 'badge-ok';
-    const badgeText  = worst >= 90 ? 'HIGH'         : worst >= 70 ? 'WARN'        : 'OK';
-    return '<tr>'
-      + '<td>' + r.time + '</td>'
-      + '<td>' + r.machine + '</td>'
-      + '<td>' + r.cpu.toFixed(1)  + '%</td>'
-      + '<td>' + r.mem.toFixed(1)  + '%</td>'
-      + '<td>' + r.memUsed   + '</td>'
-      + '<td>' + r.memTotal  + '</td>'
-      + '<td>' + r.disk.toFixed(1) + '%</td>'
-      + '<td>' + r.diskUsed  + '</td>'
-      + '<td>' + r.diskTotal + '</td>'
-      + '<td><span class="badge ' + badgeClass + '">' + badgeText + '</span></td>'
-      + '</tr>';
+  document.getElementById('log-count').textContent=logRows.length+' readings';
+  document.getElementById('log-rows').innerHTML=logRows.map(r=>{
+    const worst=Math.max(r.cpu,r.mem,r.disk);
+    const bc=worst>=90?'badge-danger':worst>=70?'badge-warn':'badge-ok';
+    const bt=worst>=90?'HIGH':worst>=70?'WARN':'OK';
+    return '<tr><td>'+r.time+'</td><td>'+r.machine+'</td><td>'+r.cpu.toFixed(1)+'%</td><td>'+r.mem.toFixed(1)+'%</td><td>'+r.memUsed+'</td><td>'+r.memTotal+'</td><td>'+r.disk.toFixed(1)+'%</td><td>'+r.diskUsed+'</td><td>'+r.diskTotal+'</td><td><span class="badge '+bc+'">'+bt+'</span></td></tr>';
   }).join('');
 }
 
-// ── Poll the server every 0.5 seconds ─────────────────────────────────────────
 fetchAndRender();
-setInterval(fetchAndRender, 500);
+setInterval(fetchAndRender, 1500);
+
+// ── History page ──────────────────────────────────────────────────────────────
+let histPage = 0;
+let histTotal = 0;
+let allMachines = [];
+
+function populateHistorySelects() {
+  const machines = allMachines;
+  ['hist-machine','stats-machine'].forEach(id => {
+    const sel = document.getElementById(id);
+    const current = sel.value;
+    sel.innerHTML = '<option value="">All Machines</option>' +
+      machines.map(m => '<option value="'+m+'"'+(m===current?' selected':'')+'>'+m+'</option>').join('');
+  });
+}
+
+async function loadHistory(page) {
+  histPage = page;
+  const machine = document.getElementById('hist-machine').value;
+  const range   = document.getElementById('hist-range').value;
+  const rangeLabel = document.getElementById('hist-range').options[document.getElementById('hist-range').selectedIndex].text;
+  document.getElementById('history-count').textContent = 'Loading…';
+  document.getElementById('hist-rows').innerHTML = '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted)">Loading…</td></tr>';
+  const url = '/history?machine='+encodeURIComponent(machine)+'&range='+range+'&page='+page;
+  try {
+    const json = await (await fetch(url)).json();
+    histTotal = json.total;
+    const machineLabel = machine || 'All Machines';
+    document.getElementById('history-count').textContent = json.total.toLocaleString() + ' readings — ' + machineLabel + ' · ' + rangeLabel;
+    const rows = json.rows;
+    document.getElementById('hist-rows').innerHTML = rows.map(r => {
+      const t = new Date(r.ts);
+      const ts = t.toLocaleDateString() + ' ' +
+        String(t.getHours()).padStart(2,'0')+':'+
+        String(t.getMinutes()).padStart(2,'0')+':'+
+        String(t.getSeconds()).padStart(2,'0');
+      return '<tr><td>'+ts+'</td><td>'+r.machine+'</td>'
+        +'<td>'+r.cpu+'%</td><td>'+r.ram+'%</td>'
+        +'<td>'+r.memUsed+'</td><td>'+r.memTotal+'</td>'
+        +'<td>'+r.disk+'%</td><td>'+r.diskUsed+'</td><td>'+r.diskTotal+'</td></tr>';
+    }).join('');
+    renderPagination(page, Math.ceil(json.total / json.size));
+  } catch(e) { console.error(e); }
+}
+
+function renderPagination(current, total) {
+  const div = document.getElementById('hist-pagination');
+  if (total <= 1) { div.innerHTML=''; return; }
+  let html = '';
+  const btnStyle = 'background:#1c2128;border:1px solid var(--border);color:var(--text);padding:4px 10px;border-radius:5px;cursor:pointer;font-size:0.75rem;';
+  const activeStyle = 'background:#1a2d4a;border-color:var(--accent);color:var(--accent);';
+  if (current > 0) html += '<button style="'+btnStyle+'" onclick="loadHistory('+(current-1)+')">← Prev</button>';
+  const start = Math.max(0, current-2), end = Math.min(total-1, current+2);
+  for (let i=start; i<=end; i++) {
+    html += '<button style="'+btnStyle+(i===current?activeStyle:'')+'" onclick="loadHistory('+i+')">'+(i+1)+'</button>';
+  }
+  if (current < total-1) html += '<button style="'+btnStyle+'" onclick="loadHistory('+(current+1)+')">Next →</button>';
+  div.innerHTML = html;
+}
+
+async function loadStats() {
+  const machine = document.getElementById('stats-machine').value;
+  const range   = document.getElementById('stats-range').value;
+  const url = '/stats?machine='+encodeURIComponent(machine)+'&range='+range;
+  try {
+    const data = await (await fetch(url)).json();
+    document.getElementById('stats-grid').innerHTML = data.map(s =>
+      '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px">' +
+      '<div style="font-size:0.72rem;font-weight:700;color:var(--accent);margin-bottom:10px;letter-spacing:.5px">'+s.machine+'</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">' +
+      statCell('CPU Avg', s.cpuAvg+'%', 'var(--cpu)') +
+      statCell('CPU Min', s.cpuMin+'%', 'var(--cpu)') +
+      statCell('CPU Max', s.cpuMax+'%', 'var(--cpu)') +
+      statCell('RAM Avg', s.ramAvg+'%', 'var(--mem)') +
+      statCell('RAM Min', s.ramMin+'%', 'var(--mem)') +
+      statCell('RAM Max', s.ramMax+'%', 'var(--mem)') +
+      statCell('Disk Avg', s.diskAvg+'%', 'var(--disk)') +
+      statCell('Disk Min', s.diskMin+'%', 'var(--disk)') +
+      statCell('Disk Max', s.diskMax+'%', 'var(--disk)') +
+      '</div>' +
+      '<div style="margin-top:8px;font-size:0.72rem;color:var(--muted)">Based on '+s.count.toLocaleString()+' readings</div>' +
+      '</div>'
+    ).join('');
+  } catch(e) { console.error(e); }
+}
+
+function statCell(label, value, color) {
+  return '<div style="text-align:center;padding:8px;background:var(--surface);border-radius:6px">' +
+    '<div style="font-size:0.65rem;color:var(--muted);margin-bottom:4px">'+label+'</div>' +
+    '<div style="font-size:1.1rem;font-weight:700;color:'+color+'">'+value+'</div>' +
+    '</div>';
+}
+
+async function loadUptime() {
+  try {
+    const data = await (await fetch('/uptime')).json();
+    document.getElementById('uptime-row').innerHTML = data.map(u => {
+      const ms = u.uptimeMs;
+      const h  = Math.floor(ms/3600000);
+      const m  = Math.floor((ms%3600000)/60000);
+      const s  = Math.floor((ms%60000)/1000);
+      const upStr = h > 0 ? h+'h '+m+'m' : m > 0 ? m+'m '+s+'s' : s+'s';
+      const lastT = new Date(u.lastSeen);
+      const lastStr = String(lastT.getHours()).padStart(2,'0')+':'+String(lastT.getMinutes()).padStart(2,'0')+':'+String(lastT.getSeconds()).padStart(2,'0');
+      const isActive = (Date.now() - u.lastSeen) < 5000;
+      return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px;position:relative;overflow:hidden">' +
+        '<div style="position:absolute;top:0;left:0;right:0;height:3px;background:var(--accent)"></div>' +
+        '<div style="font-size:0.7rem;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">'+u.machine+'</div>' +
+        '<div style="font-size:2rem;font-weight:700;color:var(--accent);line-height:1">'+upStr+'</div>' +
+        '<div style="font-size:0.75rem;color:var(--muted);margin-top:8px">'+u.count.toLocaleString()+' readings recorded</div>' +
+        '<div style="font-size:0.72rem;margin-top:4px;color:'+(isActive?'var(--mem)':'var(--muted)')+'">● '+(isActive?'Active — last seen '+lastStr:'Last seen '+lastStr)+'</div>' +
+        '</div>';
+    }).join('');
+  } catch(e) { console.error(e); }
+}
+
+async function downloadCsv() {
+  const machine = document.getElementById('hist-machine').value;
+  const range   = document.getElementById('hist-range').value;
+  // fetch all rows (page 0, size 999999)
+  const url = '/history?machine='+encodeURIComponent(machine)+'&range='+range+'&page=0';
+  // we need all rows so fetch with large size — add size param
+  try {
+    const response = await fetch('/history?machine='+encodeURIComponent(machine)+'&range='+range+'&page=0&size=999999');
+    const json = await response.json();
+    const rows = json.rows;
+    const header = 'Time,Machine,CPU%,RAM%,RAM Used,RAM Total,Disk%,Disk Used,Disk Total\n';
+    const csvRows = rows.map(r => {
+      const t = new Date(r.ts);
+      const ts = t.toLocaleDateString()+' '+String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0')+':'+String(t.getSeconds()).padStart(2,'0');
+      return [ts,r.machine,r.cpu,r.ram,r.memUsed,r.memTotal,r.disk,r.diskUsed,r.diskTotal].join(',');
+    }).join('\n');
+    const csv = header + csvRows;
+    const blob = new Blob([csv], {type:'text/csv'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'metrics_'+(machine||'all')+'_'+Date.now()+'.csv';
+    a.click();
+  } catch(e) { console.error(e); }
+}
+
 </script>
+<!-- HISTORY PAGE -->
+<div id="page-history" style="display:none">
+
+  <!-- uptime cards -->
+  <div id="uptime-row" class="kpi-row" style="margin-bottom:14px"></div>
+
+  <!-- stats cards -->
+  <div class="chart-card" style="margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+      <div class="chart-label" style="margin-bottom:0">Statistics</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <select id="stats-machine" onchange="loadStats()" style="background:#1c2128;border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:6px;font-size:0.78rem"></select>
+        <select id="stats-range" onchange="loadStats()" style="background:#1c2128;border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:6px;font-size:0.78rem">
+          <option value="3600000">Last 1 hour</option>
+          <option value="21600000">Last 6 hours</option>
+          <option value="86400000">Last 24 hours</option>
+          <option value="0" selected>All time</option>
+        </select>
+      </div>
+    </div>
+    <div id="stats-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px"></div>
+  </div>
+
+  <!-- history table -->
+  <div class="log-card">
+    <div class="log-header" style="flex-wrap:wrap;gap:10px">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <span class="log-title">History</span>
+        <span id="history-count" style="font-size:0.72rem;color:var(--accent)"></span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <select id="hist-machine" onchange="loadHistory(0)" style="background:#1c2128;border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:6px;font-size:0.78rem"></select>
+        <select id="hist-range" onchange="loadHistory(0)" style="background:#1c2128;border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:6px;font-size:0.78rem">
+          <option value="3600000">Last 1 hour</option>
+          <option value="21600000">Last 6 hours</option>
+          <option value="86400000">Last 24 hours</option>
+          <option value="0" selected>All time</option>
+        </select>
+        <button onclick="downloadCsv()" style="background:#1a2d4a;border:1px solid var(--accent);color:var(--accent);padding:5px 14px;border-radius:6px;cursor:pointer;font-size:0.78rem;font-weight:600">⬇ Download CSV</button>
+      </div>
+    </div>
+    <div id="hist-body" style="max-height:400px;overflow-y:auto;margin-top:14px">
+      <table>
+        <thead><tr><th>Time</th><th>Machine</th><th>CPU %</th><th>RAM %</th><th>RAM Used</th><th>RAM Total</th><th>Disk %</th><th>Disk Used</th><th>Disk Total</th></tr></thead>
+        <tbody id="hist-rows"></tbody>
+      </table>
+    </div>
+    <div id="hist-pagination" style="display:flex;gap:8px;margin-top:12px;justify-content:center;flex-wrap:wrap"></div>
+  </div>
+</div>
+
 </body>
 </html>

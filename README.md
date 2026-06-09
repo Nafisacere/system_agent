@@ -1,40 +1,106 @@
-This is for my internship at Ooredoo qatar
-
 # System Agent
-task: build a monitoring agent that collects CPU, RAM and disk usage
-and sends it to a server every .
 
-## How it works
-[Agent] --> collects CPU/RAM/Disk --> sends JSON --> [Server]
+A system monitoring tool built in Java that tracks CPU, RAM, and disk usage across multiple machines and displays everything on a live web dashboard.
 
-## Files
-- `Main.java`          - starts the agent
-- `SystemMonitor.java` - reads CPU, RAM, disk from the OS(opersting system)
-- `Sender.java`        - sends the data to the server
-- `FakeServer.java`    - a test server to receive the data
+Built during my internship at Ooredoo Qatar.
 
-----------------
- ## How to run  
-----------------
-### STEP 1 - Compile everything
+---
 
-paste this in the command prompt: javac -encoding UTF-8 -d bin src\agent\*.java
+## What it does
 
-### STEP 2 - Open TWO Command Prompt windows
+- Agents run on each machine and collect system stats every 500ms
+- Data is sent to a central server using UDP sockets
+- The server saves everything to a SQLite database
+- A web dashboard at `http://localhost:9000` shows live stats, charts, and history
 
-Window 1 - Starting the fake server first:
-java -cp bin agent.FakeServer
+---
 
+## Requirements
 
-Window 2 - Start the agent:
-java -cp bin agent.Main
+- Java 21 or higher
+- SQLite JDBC driver (download below)
 
+---
 
-### STEP 3 - Watch the data flow
-- Window 2 shows the agent collecting data
-- Window 1 shows the server receiving it
+## Setup
 
-## This is to send to a real server
-Change this line in Main.java:
-private static final String SERVER = "whatever link is givern";
+**1. Clone the repo**
+```
+git clone https://github.com/Nafisacere/system_agent.git
+cd system_agent
+```
 
+**2. Download the SQLite driver**
+
+Download `sqlite-jdbc-3.36.0.3.jar` from:
+```
+https://github.com/xerial/sqlite-jdbc/releases/download/3.36.0.3/sqlite-jdbc-3.36.0.3.jar
+```
+Create a `lib` folder in the project and put the jar file inside it.
+
+**3. Compile**
+```
+javac -cp "lib/sqlite-jdbc-3.36.0.3.jar" -d out src/agent/*.java
+```
+
+**4. Run**
+
+Start the server:
+```
+java -cp "out;lib/sqlite-jdbc-3.36.0.3.jar" agent.FakeServer
+```
+
+Start the agent on the same machine:
+```
+java -cp "out;lib/sqlite-jdbc-3.36.0.3.jar" agent.Main
+```
+
+Or on Windows just double-click `Start.bat` and it does everything automatically.
+
+Open the dashboard at `http://localhost:9000` and log in with:
+- Username: `admin`
+- Password: `admin123`
+
+---
+
+## Running the agent on another machine
+
+Pass the server IP as an argument:
+```
+java -cp out agent.Main 192.168.1.x
+```
+
+On a VirtualBox Linux VM (NAT mode):
+```
+java -cp out agent.Main 10.0.2.2
+```
+
+---
+
+## Dashboard
+
+**System Agent tab** — live CPU, RAM and disk stats for the selected machine
+
+**Multi-View tab** — compare all machines side by side on the same charts
+
+**History tab** — full reading history with filters, stats (avg/min/max), uptime info and CSV export
+
+---
+
+## Project structure
+
+```
+src/agent/
+  Main.java          - agent entry point
+  Sender.java        - sends data via UDP
+  SystemMonitor.java - reads CPU/RAM/disk from the OS
+  FakeServer.java    - receives UDP data, serves the dashboard
+  MetricsStore.java  - saves and reads data from SQLite
+  DashboardHandler.java - handles all HTTP requests
+  dashboard.html     - the web dashboard
+  login.html         - login page
+lib/
+  sqlite-jdbc-3.36.0.3.jar  (download separately, not included)
+Start.bat            - starts everything on Windows
+Stop.bat             - stops everything
+```
