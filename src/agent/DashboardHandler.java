@@ -33,6 +33,10 @@ public class DashboardHandler {
                 sendStats(out, path);
             } else if (path.startsWith("/uptime")) {
                 sendUptime(out);
+            } else if (path.startsWith("/alerts/resolve")) {
+                handleResolve(out, path);
+            } else if (path.startsWith("/alerts")) {
+                sendAlerts(out, path);
             } else if (path.equals("/login")) {
                 sendFile(out, "login.html");
             } else {
@@ -48,8 +52,28 @@ public class DashboardHandler {
         }
     }
 
+    // /alerts?filter=open|resolved|all
+    private void sendAlerts(OutputStream out, String path) throws Exception {
+        String filter = getParam(path, "filter", "");
+        String json   = store.alertsJson(filter);
+        writeResponse(out, "200 OK", "application/json", json.getBytes("UTF-8"));
+    }
+
+    // /alerts/resolve?id=42
+    private void handleResolve(OutputStream out, String path) throws Exception {
+        String idStr = getParam(path, "id", "");
+        if (idStr.isEmpty()) {
+            writeResponse(out, "400 Bad Request", "application/json",
+                    "{\"ok\":false,\"msg\":\"missing id\"}".getBytes("UTF-8"));
+            return;
+        }
+        int id = Integer.parseInt(idStr);
+        boolean ok = store.manualResolve(id);
+        String json = ok ? "{\"ok\":true}" : "{\"ok\":false,\"msg\":\"not found or already resolved\"}";
+        writeResponse(out, "200 OK", "application/json", json.getBytes("UTF-8"));
+    }
+
     // /history?machine=NAFISA&range=3600000&page=0
-    // range = milliseconds (1h=3600000, 6h=21600000, 24h=86400000, 0=all)
     private void sendHistory(OutputStream out, String path) throws Exception {
         String machine = getParam(path, "machine", "");
         long   range   = Long.parseLong(getParam(path, "range", "0"));
@@ -69,7 +93,6 @@ public class DashboardHandler {
         writeResponse(out, "200 OK", "application/json", json.getBytes("UTF-8"));
     }
 
-    // /uptime  — returns uptime per machine
     private void sendUptime(OutputStream out) throws Exception {
         String json = store.uptimeJson();
         writeResponse(out, "200 OK", "application/json", json.getBytes("UTF-8"));
@@ -107,7 +130,6 @@ public class DashboardHandler {
         out.write(body);
     }
 
-    // simple query string parser: getParam("?machine=NAFISA&range=3600", "machine", "") -> "NAFISA"
     private String getParam(String path, String key, String fallback) {
         int q = path.indexOf('?');
         if (q == -1) return fallback;

@@ -48,6 +48,32 @@ public class MetricsStore {
         }
     }
 
+    // ── Alert record ──────────────────────────────────────────────────────────
+    public static class Alert {
+        public final int    id;
+        public final String machine;
+        public final String metric;   // CPU / RAM / DISK
+        public final String severity; // CRITICAL / MAJOR / MINOR
+        public final double value;
+        public final double threshold;
+        public final long   raisedAt;
+        public final long   resolvedAt; // 0 = still open
+        public final String status;     // OPEN / RESOLVED
+
+        public Alert(int id, String machine, String metric, String severity,
+                     double value, double threshold, long raisedAt, long resolvedAt) {
+            this.id         = id;
+            this.machine    = machine;
+            this.metric     = metric;
+            this.severity   = severity;
+            this.value      = value;
+            this.threshold  = threshold;
+            this.raisedAt   = raisedAt;
+            this.resolvedAt = resolvedAt;
+            this.status     = resolvedAt > 0 ? "RESOLVED" : "OPEN";
+        }
+    }
+
     public MetricsStore(String dbPath) {
         this.dbPath = dbPath;
         initDb();
@@ -63,7 +89,8 @@ public class MetricsStore {
         } catch (ClassNotFoundException e) {
             System.out.println("[Server] SQLite driver not found: " + e.getMessage());
         }
-        String sql = "CREATE TABLE IF NOT EXISTS metrics ("
+
+        String metricsTable = "CREATE TABLE IF NOT EXISTS metrics ("
                 + "id        INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "machine   TEXT    NOT NULL,"
                 + "cpu       REAL    NOT NULL,"
@@ -75,8 +102,21 @@ public class MetricsStore {
                 + "diskTotal TEXT,"
                 + "ts        INTEGER NOT NULL"
                 + ")";
+
+        String alertsTable = "CREATE TABLE IF NOT EXISTS alerts ("
+                + "id         INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "machine    TEXT    NOT NULL,"
+                + "metric     TEXT    NOT NULL,"
+                + "severity   TEXT    NOT NULL,"
+                + "value      REAL    NOT NULL,"
+                + "threshold  REAL    NOT NULL,"
+                + "raised_at  INTEGER NOT NULL,"
+                + "resolved_at INTEGER DEFAULT 0"
+                + ")";
+
         try (Connection conn = connect(); Statement stmt = conn.createStatement()) {
-            stmt.execute(sql);
+            stmt.execute(metricsTable);
+            stmt.execute(alertsTable);
             System.out.println("[Server] Database ready: " + dbPath);
         } catch (SQLException e) {
             System.out.println("[Server] Database error: " + e.getMessage());
@@ -115,6 +155,187 @@ public class MetricsStore {
             System.out.println("[Server] Could not save snapshot: " + e.getMessage());
         }
     }
+
+    // ── Alert management ──────────────────────────────────────────────────────
+
+    /**
+     * Called after every save().
+     * Checks CPU/RAM/Disk thresholds and raises or resolves alerts automatically.
+     *   CRITICAL  >= 90%
+     *   MAJOR     >= 75%
+     *   MINOR     >= 60%
+     */
+    public synchronized void checkAndUpdateAlerts(Snapshot snap) {
+        checkMetric(snap.machine, "CPU",  snap.cpu,  snap.time);
+        checkMetric(snap.machine, "RAM",  snap.mem,  snap.time);
+        checkMetric(snap.machine, "DISK", snap.disk, snap.time);
+    }
+
+    private void checkMetric(String machine, String metric, double value, long ts) {
+        String severity = null;
+        double threshold = 0;
+        if      (value >= 90) { severity = "CRITICAL"; threshold = 90; }
+        else if (value >= 75) { severity = "MAJOR";    threshold = 75; }
+        else if (value >= 60) { severity = "MINOR";    threshold = 60; }
+
+        boolean openExists = hasOpenAlert(machine, metric);
+
+        if (severity != null && !openExists) {
+            // raise new alert
+            saveAlert(machine, metric, severity, value, threshold, ts);
+            System.out.printf("[ALARM] %-8s %-8s %-8s  %.1f%% (threshold: %.0f%%)%n",
+                    severity, machine, metric, value, threshold);
+        } else if (severity == null && openExists) {
+            // only auto-resolve if value has dropped 5% below the threshold that raised it
+            // this prevents flapping when the metric hovers right at the boundary
+            double clearThreshold = getClearThreshold(machine, metric);
+            if (value < clearThreshold - 5.0) {
+                resolveOpenAlert(machine, metric, ts);
+                System.out.printf("[ALARM] RESOLVED  %s  %s  (%.1f%%)%n", machine, metric, value);
+            }
+        }
+    }
+
+    /** Looks up the threshold of the current open alert for this machine+metric */
+    private double getClearThreshold(String machine, String metric) {
+        String sql = "SELECT threshold FROM alerts WHERE machine=? AND metric=? AND resolved_at=0 ORDER BY raised_at DESC LIMIT 1";
+        try (Connection conn = connect(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, machine);
+            ps.setString(2, metric);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) return rs.getDouble(1);
+        } catch (SQLException e) { /* ignore */ }
+        return 60; // fallback
+    }
+
+    private boolean hasOpenAlert(String machine, String metric) {
+        String sql = "SELECT COUNT(*) FROM alerts WHERE machine=? AND metric=? AND resolved_at=0";
+        try (Connection conn = connect(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, machine);
+            ps.setString(2, metric);
+            ResultSet rs = ps.executeQuery();
+            return rs.next() && rs.getInt(1) > 0;
+        } catch (SQLException e) { return false; }
+    }
+
+    private void saveAlert(String machine, String metric, String severity,
+                           double value, double threshold, long ts) {
+        String sql = "INSERT INTO alerts (machine, metric, severity, value, threshold, raised_at) VALUES (?,?,?,?,?,?)";
+        try (Connection conn = connect(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, machine);
+            ps.setString(2, metric);
+            ps.setString(3, severity);
+            ps.setDouble(4, value);
+            ps.setDouble(5, threshold);
+            ps.setLong  (6, ts);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            System.out.println("[Server] Could not save alert: " + e.getMessage());
+        }
+    }
+
+    private void resolveOpenAlert(String machine, String metric, long ts) {
+        String sql = "UPDATE alerts SET resolved_at=? WHERE machine=? AND metric=? AND resolved_at=0";
+        try (Connection conn = connect(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong  (1, ts);
+            ps.setString(2, machine);
+            ps.setString(3, metric);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            System.out.println("[Server] Could not resolve alert: " + e.getMessage());
+        }
+    }
+
+    /** Manual resolve from dashboard button */
+    public synchronized boolean manualResolve(int alertId) {
+        String sql = "UPDATE alerts SET resolved_at=? WHERE id=? AND resolved_at=0";
+        try (Connection conn = connect(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, System.currentTimeMillis());
+            ps.setInt (2, alertId);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.out.println("[Server] Could not manually resolve alert: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /** Returns all alerts (open first, then resolved) as JSON */
+    public synchronized String alertsJson(String filter) {
+        // filter: "open", "resolved", "" = all
+        String where = filter.equals("open")     ? "WHERE resolved_at=0"
+                     : filter.equals("resolved") ? "WHERE resolved_at>0"
+                     : "";
+        String sql = "SELECT id,machine,metric,severity,value,threshold,raised_at,resolved_at "
+                   + "FROM alerts " + where + " ORDER BY resolved_at ASC, raised_at DESC LIMIT 200";
+        StringBuilder sb = new StringBuilder();
+        sb.append("[");
+        try (Connection conn = connect();
+             Statement stmt  = conn.createStatement();
+             ResultSet rs    = stmt.executeQuery(sql)) {
+            boolean first = true;
+            while (rs.next()) {
+                if (!first) sb.append(",");
+                first = false;
+                long resolvedAt = rs.getLong("resolved_at");
+                long raisedAt   = rs.getLong("raised_at");
+                long now        = System.currentTimeMillis();
+                long durationMs = resolvedAt > 0 ? (resolvedAt - raisedAt) : (now - raisedAt);
+                sb.append("{")
+                  .append("\"id\":").append(rs.getInt("id")).append(",")
+                  .append("\"machine\":\"").append(rs.getString("machine")).append("\",")
+                  .append("\"metric\":\"").append(rs.getString("metric")).append("\",")
+                  .append("\"severity\":\"").append(rs.getString("severity")).append("\",")
+                  .append("\"value\":").append(String.format("%.1f", rs.getDouble("value"))).append(",")
+                  .append("\"threshold\":").append(String.format("%.0f", rs.getDouble("threshold"))).append(",")
+                  .append("\"raisedAt\":").append(raisedAt).append(",")
+                  .append("\"resolvedAt\":").append(resolvedAt).append(",")
+                  .append("\"durationMs\":").append(durationMs).append(",")
+                  .append("\"status\":\"").append(resolvedAt > 0 ? "RESOLVED" : "OPEN").append("\"")
+                  .append("}");
+            }
+        } catch (SQLException e) {
+            System.out.println("[Server] Alerts query error: " + e.getMessage());
+        }
+        sb.append("]");
+        return sb.toString();
+    }
+
+    /** Returns count of open alerts per machine as JSON — used for the badge in the header */
+    public synchronized String alertSummaryJson() {
+        String sql = "SELECT machine, severity, COUNT(*) as cnt FROM alerts WHERE resolved_at=0 GROUP BY machine, severity";
+        StringBuilder sb = new StringBuilder();
+        sb.append("{");
+        try (Connection conn = connect();
+             Statement stmt  = conn.createStatement();
+             ResultSet rs    = stmt.executeQuery(sql)) {
+            Map<String, Map<String,Integer>> map = new LinkedHashMap<>();
+            while (rs.next()) {
+                String m = rs.getString("machine");
+                String s = rs.getString("severity");
+                int    c = rs.getInt("cnt");
+                map.computeIfAbsent(m, k -> new LinkedHashMap<>()).put(s, c);
+            }
+            boolean first = true;
+            for (Map.Entry<String, Map<String,Integer>> e : map.entrySet()) {
+                if (!first) sb.append(",");
+                first = false;
+                sb.append("\"").append(e.getKey()).append("\":{");
+                boolean fi2 = true;
+                for (Map.Entry<String,Integer> sv : e.getValue().entrySet()) {
+                    if (!fi2) sb.append(",");
+                    fi2 = false;
+                    sb.append("\"").append(sv.getKey()).append("\":").append(sv.getValue());
+                }
+                sb.append("}");
+            }
+        } catch (SQLException e) {
+            System.out.println("[Server] Alert summary error: " + e.getMessage());
+        }
+        sb.append("}");
+        return sb.toString();
+    }
+
+    // ── Existing methods below (unchanged) ────────────────────────────────────
 
     public synchronized String toJson() {
         List<String> machineNames = getMachineNames();
@@ -157,7 +378,6 @@ public class MetricsStore {
         return names;
     }
 
-    // returns true if the machine sent data in the last 10 seconds
     private boolean isOnline(String machine) {
         String sql = "SELECT MAX(ts) FROM metrics WHERE machine = ?";
         try (Connection conn = connect(); PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -247,8 +467,6 @@ public class MetricsStore {
         sb.append("]");
     }
 
-    // ── History endpoint ──────────────────────────────────────────────────────
-    // returns paginated rows from the database as JSON
     public synchronized String historyJson(String machine, long rangeMs, int page, int size) {
         StringBuilder sb = new StringBuilder();
         sb.append("{");
@@ -312,8 +530,6 @@ public class MetricsStore {
         return sb.toString();
     }
 
-    // ── Stats endpoint ────────────────────────────────────────────────────────
-    // returns avg/min/max for cpu, ram, disk for a given machine and time range
     public synchronized String statsJson(String machine, long rangeMs) {
         long since = rangeMs > 0 ? System.currentTimeMillis() - rangeMs : 0;
 
@@ -359,8 +575,6 @@ public class MetricsStore {
         return sb.toString();
     }
 
-    // ── Uptime endpoint ───────────────────────────────────────────────────────
-    // returns how long each machine has been connected (first seen vs now)
     public synchronized String uptimeJson() {
         String sql = "SELECT machine, MIN(ts), MAX(ts), COUNT(*) FROM metrics GROUP BY machine";
         StringBuilder sb = new StringBuilder();

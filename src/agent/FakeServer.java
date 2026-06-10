@@ -19,6 +19,7 @@ public class FakeServer {
         System.out.println("Agents send data to : port " + UDP_PORT + " (UDP)");
         System.out.println("Dashboard           : http://localhost:" + HTTP_PORT + "/");
         System.out.println("Database            : " + DB_PATH);
+        System.out.println("Alarm thresholds    : MINOR>=60%  MAJOR>=75%  CRITICAL>=90%");
         System.out.println();
 
         new Thread(() -> listenUdp(store)).start();
@@ -43,7 +44,12 @@ public class FakeServer {
                 String fromIp = packet.getAddress().getHostAddress();
 
                 printToTerminal(json, fromIp);
-                saveToStore(json, store);
+                MetricsStore.Snapshot snap = saveToStore(json, store);
+
+                // ── Alarm check after every save ──────────────────────────────
+                if (snap != null) {
+                    store.checkAndUpdateAlerts(snap);
+                }
             }
         } catch (Exception e) {
             System.out.println("[Server] UDP error: " + e.getMessage());
@@ -83,16 +89,17 @@ public class FakeServer {
             String time = String.format("%02d:%02d:%02d", t.getHour(), t.getMinute(), t.getSecond());
 
             double worst  = Math.max(cpu, Math.max(mem, disk));
-            String status = worst >= 90 ? "HIGH" : worst >= 70 ? "WARN" : "OK";
+            String status = worst >= 90 ? "CRITICAL" : worst >= 75 ? "MAJOR" : worst >= 60 ? "MINOR" : "OK";
 
-            System.out.printf("[%s] %-20s | CPU: %5.1f%% | RAM: %5.1f%% (%s / %s) | Disk: %5.1f%% | %s  [from %s]%n",
+            System.out.printf("[%s] %-20s | CPU: %5.1f%% | RAM: %5.1f%% (%s / %s) | Disk: %5.1f%% | %-8s [from %s]%n",
                     time, machine, cpu, mem, memUsed, memTotal, disk, status, fromIp);
         } catch (Exception e) {
             System.out.println("[Server] Could not read packet");
         }
     }
 
-    private static void saveToStore(String json, MetricsStore store) {
+    /** Returns the saved snapshot so we can run alarm checks on it */
+    private static MetricsStore.Snapshot saveToStore(String json, MetricsStore store) {
         try {
             String machine   = parseString(json, "machine");
             double cpu       = parseDouble(json, "cpu");
@@ -103,11 +110,14 @@ public class FakeServer {
             String diskUsed  = parseStringOrDefault(json, "diskUsed",  "N/A");
             String diskTotal = parseStringOrDefault(json, "diskTotal", "N/A");
 
-            store.save(new MetricsStore.Snapshot(
+            MetricsStore.Snapshot snap = new MetricsStore.Snapshot(
                     machine, cpu, mem, disk,
-                    memUsed, memTotal, diskUsed, diskTotal));
+                    memUsed, memTotal, diskUsed, diskTotal);
+            store.save(snap);
+            return snap;
         } catch (Exception e) {
             System.out.println("[Server] Could not save data: " + e.getMessage());
+            return null;
         }
     }
 
